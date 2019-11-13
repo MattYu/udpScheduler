@@ -7,6 +7,7 @@ import collections
 import queue
 import sqlite3
 import util
+# REPLACE THIS WITH SERVER'S IP (Server IP printed when first executing 'python3 server.py')
 host = '192.168.31.238'
 #host = 'localhost'
 port = 8888
@@ -239,6 +240,7 @@ class Client:
     def _listener(self):
         self.r.bind(('', int(self.sessionName)))
         self.r.setblocking(0)
+        print("*****Current IP")
         print(self.ip)
         while (self.running):
             try:
@@ -270,7 +272,6 @@ class Client:
         try:
             dataDict = model.decodeJson(data)
         except Exception as e:
-            print(data)
             print("Error here:" + data)
             print(e)
             return

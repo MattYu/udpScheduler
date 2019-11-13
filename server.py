@@ -54,6 +54,8 @@ class Server:
 
 
     def startMenu(self):
+        print("*****Server IP")
+        print(self.ip)
         threading.Thread(target=self._menu, args=(0,0,)).start()
 
     def _menu(self, state, prevState, storedData =  {}):
@@ -210,7 +212,7 @@ class Server:
 
             acceptOrReject = model.decodeJson(data)
             
-            # Does the referred meeting exists?
+            # Does the referenced meeting exists?
             self.lock.acquire()
             invite = self.conn.cursor().execute(
                 '''
@@ -227,7 +229,7 @@ class Server:
 
             if (len(invite) > 0):
                 
-                # Was this message sent from someone invited to the referred meeting? 
+                # Was this message sent by someone invited to the referenced meeting? 
                 inviteList = self.conn.cursor().execute(
                     '''
                         SELECT * from inviteList where meetingNumber=? and ip=? and client=?
@@ -242,20 +244,20 @@ class Server:
                     self.lock.release()
                     return
 
-                # Is the invitee responding for the first time? If not, do not count the message in the tally. If a client sends two different messages for the same meeting invite, only the first will count
-                if (inviteList[0][3] == "Sent"):
-                    if (acceptOrReject.type == "Accept"):
-                        self.conn.cursor().execute(
-                            '''
-                            UPDATE inviteList SET status=? where meetingNumber=? and ip=? and client=?
-                            ''', ("Accepted", acceptOrReject.meetingNumber, addr[0], acceptOrReject.clientName)
-                        )
-                    else:
-                        self.conn.cursor().execute(
-                            '''
-                            UPDATE inviteList SET status=? where meetingNumber=? and ip=? and client=?
-                            ''', ("Refused", acceptOrReject.meetingNumber, addr[0], acceptOrReject.clientName)
-                        )
+                # Update the tally of accepted and refused participants
+                # if (inviteList[0][3] == "Sent"):
+                if (acceptOrReject.type == "Accept"):
+                    self.conn.cursor().execute(
+                        '''
+                        UPDATE inviteList SET status=? where meetingNumber=? and ip=? and client=?
+                        ''', ("Accepted", acceptOrReject.meetingNumber, addr[0], acceptOrReject.clientName)
+                    )
+                else:
+                    self.conn.cursor().execute(
+                        '''
+                        UPDATE inviteList SET status=? where meetingNumber=? and ip=? and client=?
+                        ''', ("Refused", acceptOrReject.meetingNumber, addr[0], acceptOrReject.clientName)
+                    )
 
                 # What's the total number of invitees for this meeting? (Without counting the participants who withdrew from the meeting)
                 totalInvites = self.conn.cursor().execute(
@@ -285,13 +287,12 @@ class Server:
         
                 howManyCanStillAccept = totalInvites - totalRefusedSoFar
 
-                # If insufficient responses to come to a conclusion, we stop here and wait for more responses and do nothing for now
+                # If insufficient responses to come to a conclusion, we stop here and wait for more responses and do nothing for now and none of the code below will execute
                 '''
                 if (totalAcceptedSoFar < minThreshold and howManyCanStillAccept >= minThreshold):
                     self.lock.release()
                     return
                 '''
-                # Pass this point, we have enough response to make a decision
 
                 originalInvite = model.decodeJson(invite[0][1])
                 requesterIP = originalInvite.requesterIP
@@ -316,8 +317,6 @@ class Server:
                 # If we have reached the min participant threshold for the first, we will batch send messages to all those who have previously accepted the invite
                 # The original meeting creator will get a slightly different conformation than the rest of the participants; we will peek at the original invite cached by the server to find out the identity of the original meeting creator
                 # The original meeting creator will get a new scheduled message with an updated list of participant each time a new participant accepts the invite after the original scheduled message was sent.
-
-
                 
                 acceptedParticipants = self.conn.cursor().execute(
                     '''
@@ -402,7 +401,9 @@ class Server:
                         print(e)
                         pass
                 print("loc-2")
-                # If we already reached the min participant threshold before, we will only send a confirmation in response to the current sender instead of a batch message to all participants
+                # If we already reached the min participant threshold before and a new participant accept the meeting, we will only send a confirmation in response to the current sender instead of a batch message to all participants
+                # The requester should had received a new participant list including this new participant with the above code
+                # Edge case handler-> sender did not receive the first confirm response. We'll resend the message here. 
                 if (freeSlot==True and totalAcceptedSoFar > minThreshold):
                     if (requesterIP != addr[0] or requesterPort !=acceptOrReject.clientName):
                         try:
@@ -412,7 +413,7 @@ class Server:
                             print(e)
                             pass
 
-                # Edge case handler-> meeting cancels, but sender did not receive the first cancelled response
+                # Edge case handler-> meeting cancelled, but sender did not receive the first cancelled response. We'll resend the message
                 if (requesterIP != addr[0] or requesterPort !=acceptOrReject.clientName):
                     if (howManyCanStillAccept < minThreshold -1):
                         cancel = model.Cancel(originalInvite.meetingNumber, "Below Minimum Participant")
