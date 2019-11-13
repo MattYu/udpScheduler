@@ -46,16 +46,16 @@ class Invite:
         self.targetName = clientName
 
 class Accept:
-    def __init__(self, meetingNumber, clientName):
+    def __init__(self, meetingNumber, destinationPort):
         self.type = "Accept"
         self.meetingNumber = meetingNumber
-        self.clientName = clientName
+        self.clientName = destinationPort
 
 class Reject:
-    def __init__(self, meetingNumber, clientName):
+    def __init__(self, meetingNumber, destinationPort):
         self.type = "Reject"
         self.meetingNumber = meetingNumber
-        self.clientName = clientName
+        self.clientName = destinationPort
 
 class Withdraw:
     def __init__(self, meetingNumber):
@@ -63,8 +63,9 @@ class Withdraw:
         self.meetingNumber = meetingNumber
 
 class Confirm:
-    def __init__(self, room):
+    def __init__(self, meetingNumber, room):
         self.type = "Confirm"
+        self.meetingNumber = meetingNumber
         self.room = room
 
 class Scheduled:
@@ -76,18 +77,21 @@ class Scheduled:
         self.listConfirmedParticipant = listConfirmedParticipant
 
 class Cancel:
-    def __init__(self, room, reason = ''):
+    def __init__(self, meetingNumber, reason = ''):
         self.type = "Cancel"
-        self.room = room
+        self.meetingNumber = meetingNumber
         self.reason = reason
 
 class Non_Scheduled:
-    def __init__(self, requestNumber, meetingNumber, room, listConfirmedParticipant):
+    def __init__(self, requestNumber, meetingNumber, date, time, minimum, listConfirmedParticipant, topic):
         self.type = "Non_Scheduled"
         self.requestNumber = requestNumber
         self.meetingNumber = meetingNumber
-        self.room = room
+        self.date = date
+        self.time = time
+        self.minimum = minimum
         self.listConfirmedParticipant = listConfirmedParticipant
+        self.topic = topic
 
 '''
 #r = Request("test","test","test","test","test")

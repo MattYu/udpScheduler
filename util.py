@@ -77,12 +77,13 @@ def createClientRejectTable(conn):
     except:
         pass
 
+
 def createServerInviteTable(conn):
     try:
         conn.cursor().execute(
             '''
             CREATE TABLE IF NOT EXISTS 
-            invite(meetingNumber INTEGER NOT NULL, invite VARCHAR(500) NOT NULL, min INTEGER NOT NULL, confirmed INTEGER NOT NULL)
+            invite(meetingNumber INTEGER NOT NULL, invite VARCHAR(500) NOT NULL, min INTEGER NOT NULL)
             '''
         )
     except:
@@ -105,7 +106,7 @@ def createServerBookingTable(conn):
         conn.cursor().execute(
             '''
             CREATE TABLE IF NOT EXISTS 
-            booked(date VARCHAR(25) NOT NULL, time INTEGER NOT NULL, meetingId INTEGER NOT NULL)
+            booked(date VARCHAR(25) NOT NULL, time INTEGER NOT NULL, meetingId INTEGER NOT NULL, status VARCHAR(25) NOT NULL, room VARCHAR(3) NOT NULL)
             '''
         )
     except:
@@ -116,7 +117,7 @@ def createClientInviteCacheTable(conn):
         conn.cursor().execute(
             '''
             CREATE TABLE IF NOT EXISTS 
-            inviteCache(invite VARCHAR(500) NOT NULL, prevResponse VARCHAR(500) NOT NULL, meetingNumber INTEGER NOT NULL)
+            inviteCache(invite VARCHAR(500) NOT NULL, prevResponse VARCHAR(500) NOT NULL, meetingNumber INTEGER NOT NULL, responseType VARCHAR(10) NOT NULL)
             '''
         )
     except Exception as e:
@@ -128,7 +129,7 @@ def createServerRecevedRequestTable(conn):
         conn.cursor().execute(
             '''
             CREATE TABLE IF NOT EXISTS 
-            request(request VARCHAR(500) NOT NULL, prevResponse VARCHAR(500) NOT NULL, IP VARCHAR(25) NOT NULL, client VARCHAR(25) NOT NULL, requestNumber INTEGER NOT NULL)
+            request(request VARCHAR(500) NOT NULL, prevResponse VARCHAR(500) NOT NULL, IP VARCHAR(25) NOT NULL, client VARCHAR(25) NOT NULL, requestNumber INTEGER NOT NULL, meetingNumber INTEGER NOT NULL)
             '''
         )
     except Exception as e:
@@ -240,9 +241,11 @@ def reset(conn):
         conn.cursor().execute(
             "DROP TABLE IF EXISTS requestNum"
         )
+        
         conn.cursor().execute(
             "DROP TABLE IF EXISTS meetingNum"
         )
+
         
     except Exception as e:
         print(e)

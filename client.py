@@ -129,9 +129,11 @@ class Client:
 
             isValidInput = True
             for element in lists:
-                if (msg.isdigit() and int(element) > 0 and int(element) <= len(participants)):
+                if (element.isdigit() and int(element) > 0 and int(element) <= len(participants)):
                     continue
                 else:
+                    if (msg == "Q"):
+                        return self._menu(0, 0)
                     print("****Invalid Command. Please try again")
                     return self._menu(state, prevState, storedData)
 
@@ -244,7 +246,7 @@ class Client:
                 data = d[0]
                 addr = d[1]
 
-                if (data != ""):
+                if (len(data) > 10):
                     self.startWorker(data, addr)
                 #print('It worked! ' + str(data,'utf-8'))
             
@@ -262,18 +264,26 @@ class Client:
 
     def _worker(self, data, addr):
         data = str(data, 'utf-8')
+        data = str(data).strip("'<>() ").replace('\'', '\"')
         print(data)
         print("\n")
-        dataDict = json.loads(data)
+        try:
+            dataDict = model.decodeJson(data)
+        except Exception as e:
+            print(data)
+            print("Error here:" + data)
+            print(e)
+            return
 
-        if (dataDict["type"] == "Invite" and dataDict["targetName"] == self.sessionName):
-            invite = model.decodeJson(data)
+
+        if (dataDict.type == "Invite" and dataDict.targetName == self.sessionName):
+            invite = dataDict
             # Check the cache to see if already responded to the same request before
             self.lock.acquire()
             try:
                 seek = self.conn.cursor().execute(
                 '''
-                SELECT * from inviteCache where meetingNumber like ?
+                SELECT * from inviteCache where meetingNumber like ? and responseType like 'Accepted'
                 ''', (invite.meetingNumber,)
                 ).fetchall()
 
@@ -355,12 +365,15 @@ class Client:
                     print("-2")
                     print(e)
                     pass
-
+                
             try:
+                responseType = "refused"
+                if (freeSlot): 
+                    responseType = "Accepted"
                 self.conn.cursor().execute(
                     '''
-                    INSERT INTO inviteCache(invite, prevResponse, meetingNumber) VALUES (?, ?, ?)
-                    ''', (data, message, invite.meetingNumber)
+                    INSERT INTO inviteCache(invite, prevResponse, meetingNumber, responseType) VALUES (?, ?, ?, ?)
+                    ''', (data, message, invite.meetingNumber, responseType)
                 )
             except Exception as e:
                 print("-1")
@@ -369,6 +382,8 @@ class Client:
             util.commit(self.conn)
             self.lock.release()
             self._sender(message)
+
+    
 
 if (len(sys.argv) > 1):
     Client(sys.argv[1])
