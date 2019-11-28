@@ -112,6 +112,17 @@ def createServerBookingTable(conn):
     except:
         pass
 
+def createServerMeetingNumberToRoom(conn):
+    try:
+        conn.cursor().execute(
+            '''
+            CREATE TABLE IF NOT EXISTS 
+            meetingToRoom(meetingNumber INTEGER NOT NULL, room INTEGER NOT NULL)
+            '''
+        )
+    except:
+        pass
+
 def createClientInviteCacheTable(conn):
     try:
         conn.cursor().execute(
@@ -142,7 +153,7 @@ def createBookingTable(conn):
         conn.cursor().execute(
             '''
             CREATE TABLE IF NOT EXISTS 
-            booking(date VARCHAR(25) NOT NULL, time INTEGER NOT NULL, meetingNumber VARCHAR(25) NOT NULL, sourceIP VARCHAR(25), sourceClient VARCHAR(25), status VARCHAR(25), room VARCHAR(25) NOT NULL, confirmedParticipant VARCHAR(25) NOT NULL)
+            booking(date VARCHAR(25) NOT NULL, time INTEGER NOT NULL, meetingNumber VARCHAR(25) NOT NULL, sourceIP VARCHAR(25) NOT NULL, sourceClient VARCHAR(25) NOT NULL, status VARCHAR(25) NOT NULL, room VARCHAR(25) NOT NULL, confirmedParticipant VARCHAR(25) NOT NULL, topic VARCHAR(25) NOT NULL, reason VARCHAR(100) NOT NULL, min VARCHAR(25) NOT NULL)
             '''
         )
     except:
@@ -191,7 +202,7 @@ def getParticipantList(conn):
         print(e)
         pass
 
-def addParticipant(conn, ip, clientName = "defaultUser"):
+def addParticipant(conn, ip, clientName = "8000"):
     try:
         conn.cursor().execute('INSERT INTO participant(ip, clientName) VALUES (?, ?)', (ip, clientName))
         conn.commit()
@@ -244,6 +255,10 @@ def reset(conn):
         
         conn.cursor().execute(
             "DROP TABLE IF EXISTS meetingNum"
+        )
+
+        conn.cursor().execute(
+            "DROP TABLE IF EXISTS meetingToRoom"
         )
 
         

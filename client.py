@@ -65,6 +65,7 @@ class Client:
             print("\tOption 5: See all requested meetings")
             print("\tOption 6: Cancel a requested meeting")
             print("\tOption 7: Withdraw from a confirmed meeting")
+            print("\tOption 8: Add a participant to a meeting")
             print("\tAt any time, enter 'Q' to return to the Main Menu.")
             print("\t'Exit' to turn off client")
             #print("\tOption 6: ")
@@ -162,7 +163,7 @@ class Client:
             try:
                 seek = self.conn.cursor().execute(
                 '''
-                SELECT * from booking where date like ? and time like ?
+                SELECT * from booking where date like ? and time like ? and status!="Cancelled" and status!="Non Scheduled"
                 ''', (storedData["month"] + "-" + storedData["day"], storedData["time"])
                 ).fetchall()
 
@@ -181,8 +182,8 @@ class Client:
             try:
                 self.conn.cursor().execute(
                     '''
-                    INSERT INTO booking(date, time, meetingNumber, sourceIP, sourceClient, status, room, confirmedParticipant) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    ''',(storedData["month"] + "-" + storedData["day"], storedData["time"], "unassigned", self.ip, self.sessionName, "sent", "no room yet", "")
+                    INSERT INTO booking(date, time, meetingNumber, sourceIP, sourceClient, status, room, confirmedParticipant, topic, reason, min) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''',(storedData["month"] + "-" + storedData["day"], storedData["time"], "unassigned", self.ip, self.sessionName, "sent", "no room yet", "", msg, "", "")
                 )
                 self.conn.cursor().execute(
                     '''
@@ -220,6 +221,92 @@ class Client:
             else:
                 print("****Invalid Command. Please try again")
                 return self._menu(state, prevState, storedData)
+
+        if (state == 4):
+            self.lock.acquire()
+            seek = self.conn.cursor().execute(
+                '''
+                SELECT* from booking where status="Confirmed" or status="Scheduled"
+                '''
+            ).fetchall()
+            count = 1
+            print("****Agenda****")
+            print(len(seek))
+            for row in seek:
+                print("****")
+                print(count)
+                print(row)
+
+            msg = input("Press Q to exit ")
+            self.lock.release()
+            if (msg == "Q"):
+                return self._menu(0, 0)
+            else:
+                print("****Invalid Command. Please try again")
+                return self._menu(state, prevState, storedData)
+
+        if (state == 6):
+            seek = self.conn.cursor().execute(
+                '''
+                SELECT* from booking where status="Scheduled"
+                '''
+            ).fetchall()
+            print("***Choose among the list which meeting you wish to cancel. Press 'Q' to return back\n")
+            count = 0
+            for row in seek:
+                message = "\t[" + str(count) + "] " + str(row)
+                print(message)
+
+            msg = input("Enter a meeting number:")
+            if (msg == "Q"):
+                return self._menu(0, 0)
+            elif (msg.isdigit() and int(msg) >= 0 and int(msg) < len(seek)):
+                meetingNumber = seek[int(msg)][2]
+                cancel = model.Cancel(meetingNumber, '', self.sessionName)
+                storedData["message"] = model.encode(cancel)
+                return self._menu(13, state, storedData)
+            else:
+                print("****Invalid Command. Please try again")
+                return self._menu(state, prevState)
+
+        if (state == 13):
+            print("****Are you sure?")
+            msg = input("Y/N:")
+            if (msg == "Y"):
+                self._sender(storedData["message"])
+                print("Sent")
+                return self._menu(0, 0)
+            if (msg == "N"):
+                return self._menu(prevState, state, storeData)
+            if (msg == "Q"):
+                return self._menu(0, 0)
+            else: 
+                print("****Invalid Command. Please try again")
+                return self._menu(state, prevState, storedData)
+
+        if (state == 7):
+            seek = self.conn.cursor().execute(
+                '''
+                SELECT* from booking where status="Confirmed"
+                '''
+            ).fetchall()
+            print("***Choose among the list which meeting you wish to withdraw from. Press 'Q' to return back\n")
+            count = 0
+            for row in seek:
+                message = "\t[" + str(count) + "] " + str(row)
+                print(message)
+
+            msg = input("Enter a meeting number:")
+            if (msg == "Q"):
+                return self._menu(0, 0)
+            elif (msg.isdigit() and int(msg) >= 0 and int(msg) < len(seek)):
+                meetingNumber = seek[int(msg)][2]
+                withdraw = model.Withdraw(meetingNumber, self.sessionName)
+                storedData["message"] = model.encode(cancel)
+                return self._menu(13, state, storedData)
+            else:
+                print("****Invalid Command. Please try again")
+                return self._menu(state, prevState)
 
 
 
@@ -303,8 +390,8 @@ class Client:
             try:
                 seek = self.conn.cursor().execute(
                 '''
-                SELECT * from booking where date=? and time=? and status !=?
-                ''', (invite.date, invite.time, "cancelled")
+                SELECT * from booking where date=? and time=? and status !="Cancelled" and status !="Non Scheduled"
+                ''', (invite.date, invite.time)
                 ).fetchall()
 
             except Exception as e:
@@ -316,22 +403,34 @@ class Client:
                     try:
                         seek = self.conn.cursor().execute(
                             '''
-                            UPDATE booking SET meetingNumber=?, status=? where date=? and time=?
-                            ''', (invite.meetingNumber, "acknowledged", invite.date, invite.time)
+                            UPDATE booking SET meetingNumber=? where date=? and time=?
+                            ''', (invite.meetingNumber, invite.date, invite.time)
                         )
+
+                        seek = self.conn.cursor().execute(
+                            '''
+                            UPDATE booking SET status=? where date=? and time=?
+                            ''', ("acknowledged", invite.date, invite.time)
+                        )
+
 
                     except Exception as e:
                         print("-4")
                         print(e)
                         pass
                 else:
+                    self.conn.cursor().execute(
+                        '''
+                        INSERT INTO booking(date, time, meetingNumber, sourceIP, sourceClient, status, room, confirmedParticipant, topic, reason, min) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ''',(invite.date, invite.time, invite.meetingNumber, invite.requesterIP, invite.requesterName, "Refused", "", "", invite.topic, "Schedule conflict", "")
+                    )
                     freeSlot = False
             else:
                 try:
                     self.conn.cursor().execute(
                         '''
-                        INSERT INTO booking(date, time, meetingNumber, sourceIP, sourceClient, status, room, confirmedParticipant) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                        ''',(invite.date, invite.time, invite.meetingNumber, invite.requesterIP, invite.requesterName, "Accepted", "no room yet", "")
+                        INSERT INTO booking(date, time, meetingNumber, sourceIP, sourceClient, status, room, confirmedParticipant, topic, reason, min) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ''',(invite.date, invite.time, invite.meetingNumber, invite.requesterIP, invite.requesterName, "Accepted", "no room yet", "", invite.topic, "", "")
                     )
                 except Exception as e:
                     print("-4-1")
@@ -384,7 +483,154 @@ class Client:
             self.lock.release()
             self._sender(message)
 
-    
+        if (dataDict.type == "Confirm" or dataDict.type == "Cancel" or dataDict.type == "Scheduled" or dataDict.type == "Non_Scheduled"):
+            print("R******R")
+            meetingStatus = dataDict
+            status = ""
+            reason = ""
+            room = ""
+            self.lock.acquire()
+            if (dataDict.type == "Confirm"):
+                status = "Confirmed"
+                room = meetingStatus.room
+            elif (dataDict.type == "Cancel"):
+                status = "Cancelled"
+                reason = meetingStatus.reason
+            elif (dataDict.type == "Scheduled"):
+                status = "Scheduled"
+                room = meetingStatus.room
+            else:
+                status = "Non Scheduled"
+                reason = "Insufficient number of accepted participants/Or room was booked"
+
+            try:
+                seek = self.conn.cursor().execute(
+                '''
+                SELECT * from booking where meetingNumber =? 
+                ''', (meetingStatus.meetingNumber,)
+                ).fetchall()
+            except Exception as e:
+                print(e)
+                pass
+
+            if (len(seek)>0):
+                print("P*******P")
+                print(reason)
+                print(status)
+                print(meetingStatus.meetingNumber)
+                try:
+                    '''
+                    self.conn.cursor().execute(
+                        
+                        UPDATE booking SET status=? and reason=? and room=? where meetingNumber=?
+                        , (status, reason, room, str(meetingStatus.meetingNumber))
+                    )
+                    '''
+                    self.conn.cursor().execute(
+                        '''
+                        UPDATE booking SET status=? where meetingNumber=?
+                        ''', (status, meetingStatus.meetingNumber)
+                    )
+
+                    self.conn.cursor().execute(
+                        '''
+                        UPDATE booking SET reason=? where meetingNumber=?
+                        ''', (reason, meetingStatus.meetingNumber)
+                    )
+
+                    self.conn.cursor().execute(
+                        '''
+                        UPDATE booking SET room=? where meetingNumber=?
+                        ''', (room, meetingStatus.meetingNumber)
+                    )
+
+                except Exception as e:
+                    print(e)
+                    pass
+                util.commit(self.conn)
+                if (dataDict.type == "Scheduled" or dataDict.type == "Non_Scheduled"):
+                    self.conn.cursor().execute(
+                        '''
+                        UPDATE booking SET confirmedParticipant=? where meetingNumber=?
+                        ''', (''.join(str(e) for e in meetingStatus.listConfirmedParticipant), meetingStatus.meetingNumber)
+                    )
+                    util.commit(self.conn)
+                    if (dataDict.type == "Non_Scheduled"):
+                        self.conn.cursor().execute(
+                            '''
+                            UPDATE booking SET min=? where meetingNumber=?
+                            ''', (meetingStatus.minimum, meetingStatus.meetingNumber)
+                        )
+                    util.commit(self.conn)
+                if (dataDict.type == "Accept"):
+                    self.conn.cursor().execute(
+                        '''
+                        UPDATE accept SET status=? where meetingNumber=?
+                        ''', ("received", meetingStatus.meetingNumber)
+                    )
+                    self.conn.cursor().execute(
+                        '''
+                        UPDATE reject SET status=? where meetingNumber=?
+                        ''', ("received", meetingStatus.meetingNumber)
+                    )
+
+                if (dataDict.type == "Cancel"):
+                    self.conn.cursor().execute(
+                        '''
+                        UPDATE accept SET status=? where meetingNumber=?
+                        ''', ("received", meetingStatus.meetingNumber)
+                    )
+                    self.conn.cursor().execute(
+                        '''
+                        UPDATE reject SET status=? where meetingNumber=?
+                        ''', ("received", meetingStatus.meetingNumber)
+                    )
+                if (dataDict.type == "Cancel" or dataDict.type == "Non_Scheduled"):
+                    # Can now accept another meeting at the same time slot. Attempt to find a previously refused meeting 
+
+                    seek =  self.conn.cursor().execute(
+                        '''
+                        SELECT* from booking where meetingNumber=?
+                        ''', (meetingStatus.meetingNumber,)
+                    ).fetchall()
+
+                    date = seek[0][0]
+                    time = seek[0][1]
+
+                    # Find another previous refused meeting at the same date and time and accept it if one is found
+
+                    seek =  self.conn.cursor().execute(
+                        '''
+                        SELECT* from booking where date=? and time=? and status="Refused"
+                        ''', (date,time)
+                    ).fetchall()
+
+
+                    if (len(seek)>0):
+                        newMeetingNumber = seek[0][2]
+
+                        add = model.Add(newMeetingNumber,self.sessionName)
+                        message = model.encode(add)
+
+                        self.conn.cursor().execute(
+                        '''
+                        UPDATE booking SET status =? where meetingNumber=?
+                        ''', ("Accepted", newMeetingNumber)
+                        )
+                        try:
+                            self.conn.cursor().execute(
+                                '''
+                                INSERT INTO accept(meetingNumber, date, time, status) VALUES (?, ?, ?, ?)
+                                ''',(newMeetingNumber, date, time, "sent")
+                            )
+                        except Exception as e:
+                            print(e)
+                            pass
+
+                        self._sender(message)
+            util.commit(self.conn)
+            self.lock.release()
+            
 
 if (len(sys.argv) > 1):
     Client(sys.argv[1])

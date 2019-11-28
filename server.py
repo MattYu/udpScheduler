@@ -24,6 +24,7 @@ class Server:
         util.createServerInviteTable(self.conn)
         util.createServerInviteListTable(self.conn)
         util.createServerMeetingNumCacheTable(self.conn)
+        util.createServerMeetingNumberToRoom(self.conn)
         try:
             currentMeetingNum = self.conn.cursor().execute(
                 '''
@@ -61,14 +62,26 @@ class Server:
     def _menu(self, state, prevState, storedData =  {}):
         if (state == 0):
             print("\t****Server Main Menu*****")
+            print("\t '1' to print booked agenda")
             print("\t'Exit' to turn off server")
 
             msg = input("\tEnter input: ")
+
+
             if (msg == "Exit"):
                 self.running = False
                 return
-            if (msg.isdigit() and int(msg) > 0 and int(msg) <= 0):
-                return self._menu(int(msg), state)
+            if (msg.isdigit() and int(msg) == 1):
+                seek = self.conn.cursor().execute(
+                '''
+                SELECT* from booked
+                '''
+                ).fetchall()
+                print("****Booked meetings")
+                for row in seek:
+                    print(row)
+
+                return self._menu(0, 0)
             else:
                 print("\t****Invalid Command. Please try again")
                 return self._menu(state, prevState)
@@ -106,6 +119,7 @@ class Server:
         # Request Handler
         ###################################
         if (dataDict["type"] == "Request"):
+            print("R-1")
             request = model.decodeJson(data)
             # Check the cache to see if already responded to the same request before
             self.lock.acquire()
@@ -131,7 +145,7 @@ class Server:
                     self.s.sendto(response.encode(), (addr[0], int(request.requestClientName)))
                 self.lock.release()
                 return
-
+            print("R-2")
             # Check if free slot is available, respond accordingly and update cache
             freeSlot = True
             try:
@@ -148,7 +162,9 @@ class Server:
 
             meetingNumber = -1
             message = ""
+            print("R-3")
             if (len(seek) > self.meetingRoomNum):
+                print("R-4")
                 response = model.Response(request.requestNumber, request.requestClientName, "No room available")
                 message = model.encode(response)
                 try:
@@ -157,6 +173,7 @@ class Server:
                     print(e)
                     pass
             else:
+                print("R-5")
                 invite = model.Invite(request.date, request.time, request.topic, addr[0], request.requestClientName, request.requestClientName)
                 meetingNumber = invite.meetingNumber
                 try:
@@ -177,10 +194,12 @@ class Server:
                     pass
 
                 for participant in request.participant:
+                    print("R-5-1")
                     invite.targetName = participant[1]
                     message = model.encode(invite)
-                    print("Comparison:" + participant[0] + "vs" + addr[0])
                     try:
+                        print(participant[0])
+                        print(int(invite.targetName))
                         self.s.sendto(message.encode(), (participant[0], int(invite.targetName)))
                     except Exception as e:
                         print(e)
@@ -195,7 +214,7 @@ class Server:
                         print(e)
                         pass
 
-
+            print("R-6")
             self.conn.cursor().execute(
                 '''
                 INSERT INTO request(request, prevResponse, IP, client, requestNumber, meetingNumber) VALUES (?, ?, ?, ?, ?, ?)
@@ -205,9 +224,9 @@ class Server:
             self.lock.release()
 
         ###################################
-        # Accept or Reject handler
+        # Accept or Reject or Add handler 
         ###################################
-        if (dataDict["type"] == "Accept" or dataDict["type"] == "Reject"):
+        if (dataDict["type"] == "Accept" or dataDict["type"] == "Reject" or dataDict["type"] == "Add"):
             # Note that a client will continuously ping the server (send its accept meeting or reject meeting message every 5 seconds) until it receves either a cancel, confirm, scheduled or not_scheduled message from the server
 
             acceptOrReject = model.decodeJson(data)
@@ -221,6 +240,8 @@ class Server:
             ).fetchall()
             # If the client sent us a meeting number that does not exist in the system, we'll send a cancel message to avoid getting continuously pinged by the client instead of ignoring it
             if (len(invite) == 0):
+                    
+
                 message = model.Cancel(acceptOrReject.meetingNumber, "Meeting does not exits")
                 response = model.encode(message)
                 self.s.sendto(response.encode(), (addr[0], int(acceptOrReject.clientName)))
@@ -228,6 +249,9 @@ class Server:
                 return
 
             if (len(invite) > 0):
+                originalInvite = model.decodeJson(invite[0][1])
+                requesterIP = originalInvite.requesterIP
+                requesterPort = originalInvite.requesterName
                 
                 # Was this message sent by someone invited to the referenced meeting? 
                 inviteList = self.conn.cursor().execute(
@@ -235,14 +259,38 @@ class Server:
                         SELECT * from inviteList where meetingNumber=? and ip=? and client=?
                     ''', (acceptOrReject.meetingNumber, addr[0], acceptOrReject.clientName)
                 ).fetchall()
-                # If the client is not invited to the meeting, we'll send a cancel message to avoid getting continuously pinged by the client instead of ignoring it
+                # If the client is not invited to the meeting, was this an add request? 
                 if (len(inviteList) == 0):
-                    print("Participant was not invited")
-                    message = model.Cancel(acceptOrReject.meetingNumber, "You are not invited to this meeting")
-                    response = model.encode(message)
-                    self.s.sendto(response.encode(), (addr[0], int(acceptOrReject.clientName)))
-                    self.lock.release()
-                    return
+                    # If yes, we'll add it to the IP inviteList if the add request came from a new participant
+                    if (dataDict["type"] == "Add"):
+                        self.conn.cursor().execute(
+                            '''
+                                INSERT INTO inviteList(meetingNumber, ip, client, status) VALUES (?, ?, ?, ?)
+                            ''', (acceptOrReject.meetingNumber, addr[0], acceptOrReject.clientName, "Added")
+                        )
+                        # Refresh the invite list
+                        inviteList = self.conn.cursor().execute(
+                            '''
+                                SELECT * from inviteList where meetingNumber=? and ip=? and client=?
+                            ''', (acceptOrReject.meetingNumber, addr[0], acceptOrReject.clientName)
+                        ).fetchall()
+                    else:
+                        # If no we'll send a cancel message to avoid getting continuously pinged by the client instead of ignoring it
+                        print("Participant was not invited")
+                        message = model.Cancel(acceptOrReject.meetingNumber, "You are not invited to this meeting")
+                        response = model.encode(message)
+                        self.s.sendto(response.encode(), (addr[0], int(acceptOrReject.clientName)))
+                        self.lock.release()
+                        return
+
+                if (dataDict["type"] == "Add"):
+                    # If add request, we'll notify the original requester
+                    added = model.Added(acceptOrReject.meetingNumber, addr[0], acceptOrReject.clientName)
+                    message = model.encode(added)
+                    self.s.sendto(message.encode(), (requesterIP, int(requesterPort)))
+                    # From now on, the "add" request will be treated as a "accept request" with the same logic
+                    acceptOrReject = model.Accept(acceptOrReject.meetingNumber, acceptOrReject.clientName)
+
 
                 # Update the tally of accepted and refused participants
                 # if (inviteList[0][3] == "Sent"):
@@ -259,10 +307,10 @@ class Server:
                         ''', ("Refused", acceptOrReject.meetingNumber, addr[0], acceptOrReject.clientName)
                     )
 
-                # What's the total number of invitees for this meeting? (Without counting the participants who withdrew from the meeting)
+                # What's the total number of invitees for this meeting?
                 totalInvites = self.conn.cursor().execute(
                     '''
-                    SELECT COUNT(*) from inviteList where meetingNumber=? and status!='withdrawn'
+                    SELECT COUNT(*) from inviteList where meetingNumber=? 
                     ''',(acceptOrReject.meetingNumber,)
                 ).fetchone()[0]
 
@@ -274,10 +322,10 @@ class Server:
                     ''',(acceptOrReject.meetingNumber,)
                 ).fetchone()[0]
 
-                # How many refused so far?
+                # How many refused or withdrawn so far?
                 totalRefusedSoFar = self.conn.cursor().execute(
                     '''
-                    SELECT COUNT(*) from inviteList where meetingNumber=? and status='Refused'
+                    SELECT COUNT(*) from inviteList where meetingNumber=? and (status='Refused' or status='Withdrawn')
                     ''',(acceptOrReject.meetingNumber,)
                 ).fetchone()[0]
 
@@ -294,27 +342,51 @@ class Server:
                     return
                 '''
 
-                originalInvite = model.decodeJson(invite[0][1])
-                requesterIP = originalInvite.requesterIP
-                requesterPort = originalInvite.requesterName
                 # Note that since the scheduler works on a first come first served basis, while it guarantees a room was free at the time the request was made, by the time the meeting gets confirmed, another request might have taken the room
                 # If that happens, we will send a cancel message instead
                 freeSlot = True
+                addMeeting = True
+                ##################
                 try:
                     seek = self.conn.cursor().execute(
                     '''
-                    SELECT * from booked where date=? and time=? and status!='Cancelled' and meetingId!=?
+                    SELECT * from booked where date=? and time=? and status !="Cancelled"
+                    ''', (originalInvite.date, originalInvite.time)
+                    ).fetchall()
+
+                    '''
+                    seek = self.conn.cursor().execute(
+                    '''
+                    #SELECT * from booked where date=? and time=? and meetingId!=? and status!='Cancelled'
                     ''', (originalInvite.date, originalInvite.time, originalInvite.meetingNumber)
                     ).fetchall()
+                    '''
+                    print("wtf")
+                    print(originalInvite.meetingNumber)
+                    print(len(seek))
                 except Exception as e:
                     print("Something went wrong")
                     print(e)
                     pass
-                if (len(seek) > self.meetingRoomNum):
-                    Print("No more roomm available")
-                    freeSlot = False
+                # If the meeting has already been scheduled, do not add a new entry. 
+                if (len(seek) >= self.meetingRoomNum):
+                    meetingNumber = seek[0][2]
+                    print("*!*!*!*!**!*!*!*!!*")
+                    seek = self.conn.cursor().execute(
+                        '''
+                        SELECT * from booked where meetingId=?
+                        ''', (originalInvite.meetingNumber,)
+                        ).fetchall()
+                    print(len(seek))
+                    print(seek[0][2])
+                    if (len(seek) == 0):
+                        freeSlot = False
+                    else:
+                        addMeeting = False
+                ###############
 
-                # If we have reached the min participant threshold for the first, we will batch send messages to all those who have previously accepted the invite
+
+                # If we have reached the min participant threshold for the first, we will batch send messages to all those who have previously accepted the invite. Otherwise, a message will be sent only to the current correspondant
                 # The original meeting creator will get a slightly different conformation than the rest of the participants; we will peek at the original invite cached by the server to find out the identity of the original meeting creator
                 # The original meeting creator will get a new scheduled message with an updated list of participant each time a new participant accepts the invite after the original scheduled message was sent.
                 
@@ -328,14 +400,40 @@ class Server:
 
                 if (freeSlot==True and totalAcceptedSoFar == minThreshold):
                     print("DB - 1")
-                    self.conn.cursor().execute(
-                        '''
-                        INSERT INTO booked(date, time, meetingId, status, room) VALUES (?, ?, ?, ?, ?)
-                        ''',(originalInvite.date, originalInvite.time, originalInvite.meetingNumber, "booked", len(seek)+1)
-                    )
+                    if addMeeting:
+                        try:
+                            self.conn.cursor().execute(
+                                '''
+                                INSERT INTO booked(date, time, meetingId, status, room) VALUES (?, ?, ?, ?, ?)
+                                ''',(originalInvite.date, originalInvite.time, originalInvite.meetingNumber, "booked", len(seek)+1)
+                            )
+                        except Exception as e:
+                            print("Error Ocurred*****")
+                            print(e)
+                            pass
+
+                        try:
+                            self.conn.cursor().execute(
+                                '''
+                                INSERT INTO meetingToRoom(meetingNumber, room) VALUES (?, ?)
+                                ''',(originalInvite.meetingNumber, len(seek)+1)
+                            )
+                        except Exception as e:
+                            print("Error Ocurred*****")
+                            print(e)
+                            pass
 
                 message = model.encode(confirm)
                 print("loc-0")
+                seekMeetingRoom = self.conn.cursor().execute(
+                    '''
+                    SELECT * from meetingToRoom where meetingNumber=?
+                    ''',(originalInvite.meetingNumber, )
+                ).fetchall()
+                meetingRoom = -1
+                if (len(seekMeetingRoom)> 0):
+                    meetingRoom = seekMeetingRoom[0][1]
+
                 listConfirmedParticipant = []
                 for participant in acceptedParticipants:
                     pIp = participant[1]
@@ -354,7 +452,7 @@ class Server:
                 if (howManyCanStillAccept == (minThreshold -1) or freeSlot == False):
                     allParticipants = self.conn.cursor().execute(
                         '''
-                        SELECT * FROM inviteList where meetingNumber=?
+                        SELECT * FROM inviteList where meetingNumber=? and status!='withdrawn'
                         ''',(acceptOrReject.meetingNumber,)
                     ).fetchall()
 
@@ -383,7 +481,7 @@ class Server:
                 requestNumber = oldRequest[0][5]
                 message = ''
                 if (totalAcceptedSoFar >= minThreshold and freeSlot == True):
-                    scheduled = model.Scheduled(requestNumber, originalInvite.meetingNumber, len(seek)+1, listConfirmedParticipant) # Testing
+                    scheduled = model.Scheduled(requestNumber, originalInvite.meetingNumber, meetingRoom, listConfirmedParticipant) # Testing
                     message = model.encode(scheduled)
                     try:
                         print("Schedule-2")
@@ -408,6 +506,8 @@ class Server:
                     if (requesterIP != addr[0] or requesterPort !=acceptOrReject.clientName):
                         try:
                             print("confirm-1")
+                            confirm = model.Confirm(originalInvite.meetingNumber, meetingRoom)
+                            message = model.encode(confirm)
                             self.s.sendto(message.encode(), (addr[0], int(acceptOrReject.clientName)))
                         except Exception as e:
                             print(e)
@@ -427,9 +527,164 @@ class Server:
 
                 self.lock.release()
 
-        
+        if (dataDict["type"] == "Withdraw"):
+            withdraw = model.decodeJson(data)
+
+            # Does the referenced meeting exists?
+            self.lock.acquire()
+            seek = self.conn.cursor().execute(
+                '''
+                    SELECT * from booked where meetingId=?
+                ''', (withdraw.meetingNumber, )
+            ).fetchall()
+            if (len(seek) > 0):
+                # Was the person in the invite list?
+                seek = self.conn.cursor().execute(
+                '''
+                    SELECT * from inviteList where meetingNumber=? and ip=? and client=?
+                ''', (withdraw.meetingNumber, addr[0], int(withdraw.clientName))
+                ).fetchall()
+                
+                if (len(seek) > 0):
+                    # If yes, fetch the saved copy of the original invite to find out the ip and sessionName of the requester, the min threshold, etc.
+                    seek = self.conn.cursor().execute(
+                    '''
+                        SELECT * from invite where meetingNumber=?
+                    ''', (withdraw.meetingNumber, )
+                    ).fetchall()
+                    # And update the status of the invitee to withdrawn
+                    self.conn.cursor().execute(
+                    '''
+                    UPDATE inviteList SET status=? where meetingNumber=? and ip=? and client=?
+                    ''', ("Withdrawn", withdraw.meetingNumber, addr[0], withdraw.clientName)
+                    )
+
+                    if (len(seek)>0):
+                        inviteStr = seek[0][1]
+                        invite = model.decodeJson(inviteStr)
+
+                        minParticipant = int(seek[0][2])
+
+                        # check to see if below min now
+                        # What's the total number of invitees for this meeting?
+                        totalInvites = self.conn.cursor().execute(
+                            '''
+                            SELECT COUNT(*) from inviteList where meetingNumber=? 
+                            ''',(withdraw.meetingNumber,)
+                        ).fetchone()[0]
+
+
+                        # How many accepted so far?
+                        totalAcceptedSoFar = self.conn.cursor().execute(
+                            '''
+                            SELECT COUNT(*) from inviteList where meetingNumber=? and status='Accepted'
+                            ''',(withdraw.meetingNumber,)
+                        ).fetchone()[0]
+
+                        # How many refused so far or withdrawn so far?
+                        totalRefusedSoFar = self.conn.cursor().execute(
+                            '''
+                            SELECT COUNT(*) from inviteList where meetingNumber=? and (status='Refused' or status='Withdrawn')
+                            ''',(withdraw.meetingNumber,)
+                        ).fetchone()[0]
+
+                        # Based on the current accepted or refused tally, can the meeting still happen?
+                
+                        howManyCanStillAccept = totalInvites - totalRefusedSoFar
+
+                        if (howManyCanStillAccept < minParticipant):
+                            # cancel the entire meeting; send notification to all participants
+                            allParticipants = self.conn.cursor().execute(
+                                '''
+                                SELECT * FROM inviteList where meetingNumber=? and status!='Withdrawn'
+                                ''',(withdraw.meetingNumber,)
+                            ).fetchall()
+
+                            self.conn.cursor().execute(
+                            '''
+                            UPDATE booked SET status="Cancelled" where meetingId=?
+                            ''', (withdraw.meetingNumber,)
+                            )
+
+                            cancel = model.Cancel(withdraw.meetingNumber, "Below Minimum Participant due to withdrawal")
+                            message = model.encode(cancel)
+                            for participant in allParticipants:
+                                pIp = participant[1]
+                                pName = participant[2]
+                                try:
+                                    self.s.sendto(message.encode(), (pIp, int(pName)))
+                                except Exception as e:
+                                    print(e)
+                                    pass
+                        else:
+                            withdraw = model.Withdraw(withdraw.meetingNumber, withdraw.clientName, addr[0])
+                            message = model.encode(withdraw)
+                            requesterIP = invite.requesterIP
+                            requesterPort = invite.targetName
+                            try:
+                                self.s.sendto(message.encode(), (requesterIP, int(requesterPort)))
+                            except Exception as e:
+                                print(e)
+                                pass
+            self.lock.release()
+
+        if (dataDict["type"] == "Cancel"):
+            cancel = model.decodeJson(data)
+            print("Cancel-1")
+            self.lock.acquire()
+
+            # Does the referenced meeting exists?
+            seek = self.conn.cursor().execute(
+                '''
+                    SELECT * from booked where meetingId=?
+                ''', (cancel.meetingNumber, )
+            ).fetchall()
+
+            if (len(seek) > 0):
+                print("Cancel-2")
+                # If yes, fetch the saved copy of the original invite to find out the ip and sessionName of the requester, the min threshold, etc.
+                seek = self.conn.cursor().execute(
+                '''
+                    SELECT * from invite where meetingNumber=?
+                ''', (cancel.meetingNumber, )
+                ).fetchall()
+                if (len(seek)>0):
+                    print("Cancel-3")
+                    inviteStr = seek[0][1]
+                    invite = model.decodeJson(inviteStr)
+                    requesterIP = invite.requesterIP
+                    requesterName = invite.requesterName
+                    # If the current message indeed was sent by the original meeting requester, we cancel the meeting and send a message to all participants
+                    if (requesterIP == addr[0] and requesterName == cancel.clientName):
+                        print("Cancel-4")
+                        self.conn.cursor().execute(
+                        '''
+                        UPDATE booked SET status="Cancelled" where meetingId=?
+                        ''', (cancel.meetingNumber,)
+                        )
+
+                        # cancel the entire meeting; send notification to all participants
+                        allParticipants = self.conn.cursor().execute(
+                            '''
+                            SELECT * FROM inviteList where meetingNumber=? and status!='Withdrawn'
+                            ''',(cancel.meetingNumber,)
+                        ).fetchall()
+
+                        cancel = model.Cancel(cancel.meetingNumber, "Cancelled by the organizer")
+                        message = model.encode(cancel)
+                        print("Cancel-5")
+                        for participant in allParticipants:
+                            pIp = participant[1]
+                            pName = participant[2]
+                            try:
+                                self.s.sendto(message.encode(), (pIp, int(pName)))
+                            except Exception as e:
+                                print(e)
+                                pass
+
+            self.lock.release()
         #self.s.sendto(("testss").encode(), (addr[0], 8000))
 
 
 
-Server(1)
+Server(2)
