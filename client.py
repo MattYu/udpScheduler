@@ -163,7 +163,7 @@ class Client:
             try:
                 seek = self.conn.cursor().execute(
                 '''
-                SELECT * from booking where date like ? and time like ? and status!="Cancelled" and status!="Non Scheduled"
+                SELECT * from booking where date like ? and time like ? and (status="Scheduled" or status="Confirmed")
                 ''', (storedData["month"] + "-" + storedData["day"], storedData["time"])
                 ).fetchall()
 
@@ -233,9 +233,9 @@ class Client:
             print("****Agenda****")
             print(len(seek))
             for row in seek:
-                print("****")
                 print(count)
                 print(row)
+                count+=1
 
             msg = input("Press Q to exit ")
             self.lock.release()
@@ -256,6 +256,7 @@ class Client:
             for row in seek:
                 message = "\t[" + str(count) + "] " + str(row)
                 print(message)
+                count += 1
 
             msg = input("Enter a meeting number:")
             if (msg == "Q"):
@@ -264,6 +265,8 @@ class Client:
                 meetingNumber = seek[int(msg)][2]
                 cancel = model.Cancel(meetingNumber, '', self.sessionName)
                 storedData["message"] = model.encode(cancel)
+                storedData["type"] = "Cancelled"
+                storedData["meetingNumber"] = meetingNumber
                 return self._menu(13, state, storedData)
             else:
                 print("****Invalid Command. Please try again")
@@ -274,10 +277,15 @@ class Client:
             msg = input("Y/N:")
             if (msg == "Y"):
                 self._sender(storedData["message"])
+                self.conn.cursor().execute(
+                    '''
+                    UPDATE booking SET status=? where meetingNumber=?
+                    ''',(storedData["type"] , storedData["meetingNumber"])
+                )
                 print("Sent")
                 return self._menu(0, 0)
             if (msg == "N"):
-                return self._menu(prevState, state, storeData)
+                return self._menu(prevState, state, storedData)
             if (msg == "Q"):
                 return self._menu(0, 0)
             else: 
@@ -295,6 +303,7 @@ class Client:
             for row in seek:
                 message = "\t[" + str(count) + "] " + str(row)
                 print(message)
+                count +=1
 
             msg = input("Enter a meeting number:")
             if (msg == "Q"):
@@ -302,7 +311,9 @@ class Client:
             elif (msg.isdigit() and int(msg) >= 0 and int(msg) < len(seek)):
                 meetingNumber = seek[int(msg)][2]
                 withdraw = model.Withdraw(meetingNumber, self.sessionName)
-                storedData["message"] = model.encode(cancel)
+                storedData["message"] = model.encode(withdraw)
+                storedData["type"] = "Withdrawn"
+                storedData["meetingNumber"] = meetingNumber
                 return self._menu(13, state, storedData)
             else:
                 print("****Invalid Command. Please try again")
@@ -390,7 +401,7 @@ class Client:
             try:
                 seek = self.conn.cursor().execute(
                 '''
-                SELECT * from booking where date=? and time=? and status !="Cancelled" and status !="Non Scheduled"
+                SELECT * from booking where date=? and time=? and status !="Cancelled" and status !="Non Scheduled" and status!="Withdrawn"
                 ''', (invite.date, invite.time)
                 ).fetchall()
 
@@ -403,14 +414,14 @@ class Client:
                     try:
                         seek = self.conn.cursor().execute(
                             '''
-                            UPDATE booking SET meetingNumber=? where date=? and time=?
+                            UPDATE booking SET meetingNumber=? where date=? and time=? and status !="Cancelled" and status !="Non Scheduled" and status!="Withdrawn"
                             ''', (invite.meetingNumber, invite.date, invite.time)
                         )
 
                         seek = self.conn.cursor().execute(
                             '''
-                            UPDATE booking SET status=? where date=? and time=?
-                            ''', ("acknowledged", invite.date, invite.time)
+                            UPDATE booking SET status=? where date=? and time=? and meetingNumber=?
+                            ''', ("acknowledged", invite.date, invite.time, invite.meetingNumber)
                         )
 
 
@@ -419,6 +430,9 @@ class Client:
                         print(e)
                         pass
                 else:
+                    print("*************************!!!!!!!!!!!!!!!*****************************")
+                    for row in seek:
+                        print(row)
                     self.conn.cursor().execute(
                         '''
                         INSERT INTO booking(date, time, meetingNumber, sourceIP, sourceClient, status, room, confirmedParticipant, topic, reason, min) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -528,19 +542,19 @@ class Client:
                     '''
                     self.conn.cursor().execute(
                         '''
-                        UPDATE booking SET status=? where meetingNumber=?
+                        UPDATE booking SET status=? where meetingNumber=? and status!="Cancelled"
                         ''', (status, meetingStatus.meetingNumber)
                     )
 
                     self.conn.cursor().execute(
                         '''
-                        UPDATE booking SET reason=? where meetingNumber=?
+                        UPDATE booking SET reason=? where meetingNumber=? and status!="Cancelled"
                         ''', (reason, meetingStatus.meetingNumber)
                     )
 
                     self.conn.cursor().execute(
                         '''
-                        UPDATE booking SET room=? where meetingNumber=?
+                        UPDATE booking SET room=? where meetingNumber=? and status!="Cancelled"
                         ''', (room, meetingStatus.meetingNumber)
                     )
 

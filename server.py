@@ -89,6 +89,14 @@ class Server:
     def startListner(self):
         threading.Thread(target=self._listener).start()
 
+    def _sender(self, message, ip, port):
+        try :
+            self.s.sendto(message.encode(), (ip, port))
+            
+        except Exception as e:
+            print(e)
+            sys.exit()
+
     def _listener(self):
         while (self.running):
             try:
@@ -137,12 +145,14 @@ class Server:
                 if (seek[0][0] == data):
                     print("Message deja vu")
                     response = seek[0][1]
-                    self.s.sendto(response.encode(), (addr[0], int(request.requestClientName)))
+                    self._sender(response, addr[0], int(request.requestClientName))
+                    #self.s.sendto(response.encode(), (addr[0], int(request.requestClientName)))
                 else:
                     print("Invalid message")
                     response = model.Response(request.requestNumber, request.requestClientName, "The request number has been previously used for another message")
                     response = model.encode(response)
-                    self.s.sendto(response.encode(), (addr[0], int(request.requestClientName)))
+                    self._sender(response, addr[0], int(request.requestClientName))
+                    #self.s.sendto(response.encode(), (addr[0], int(request.requestClientName)))
                 self.lock.release()
                 return
             print("R-2")
@@ -168,7 +178,8 @@ class Server:
                 response = model.Response(request.requestNumber, request.requestClientName, "No room available")
                 message = model.encode(response)
                 try:
-                    self.s.sendto(message.encode(), (addr[0], int(request.requestClientName)))
+                    self._sender(message, addr[0], int(request.requestClientName))
+                    #self.s.sendto(message.encode(), (addr[0], int(request.requestClientName)))
                 except Exception as e:
                     print(e)
                     pass
@@ -200,7 +211,8 @@ class Server:
                     try:
                         print(participant[0])
                         print(int(invite.targetName))
-                        self.s.sendto(message.encode(), (participant[0], int(invite.targetName)))
+                        self._sender(message, participant[0], int(invite.targetName))
+                        #self.s.sendto(message.encode(), (participant[0], int(invite.targetName)))
                     except Exception as e:
                         print(e)
                         pass
@@ -244,7 +256,8 @@ class Server:
 
                 message = model.Cancel(acceptOrReject.meetingNumber, "Meeting does not exits")
                 response = model.encode(message)
-                self.s.sendto(response.encode(), (addr[0], int(acceptOrReject.clientName)))
+                self._sender(response, addr[0], int(acceptOrReject.clientName))
+                #self.s.sendto(response.encode(), (addr[0], int(acceptOrReject.clientName)))
                 self.lock.release()
                 return
 
@@ -279,7 +292,8 @@ class Server:
                         print("Participant was not invited")
                         message = model.Cancel(acceptOrReject.meetingNumber, "You are not invited to this meeting")
                         response = model.encode(message)
-                        self.s.sendto(response.encode(), (addr[0], int(acceptOrReject.clientName)))
+                        self._sender(response, addr[0], int(acceptOrReject.clientName))
+                        #self.s.sendto(response.encode(), (addr[0], int(acceptOrReject.clientName)))
                         self.lock.release()
                         return
 
@@ -287,7 +301,8 @@ class Server:
                     # If add request, we'll notify the original requester
                     added = model.Added(acceptOrReject.meetingNumber, addr[0], acceptOrReject.clientName)
                     message = model.encode(added)
-                    self.s.sendto(message.encode(), (requesterIP, int(requesterPort)))
+                    self._sender(message, requesterIP, int(requesterPort))
+                    #self.s.sendto(message.encode(), (requesterIP, int(requesterPort)))
                     # From now on, the "add" request will be treated as a "accept request" with the same logic
                     acceptOrReject = model.Accept(acceptOrReject.meetingNumber, acceptOrReject.clientName)
 
@@ -443,7 +458,8 @@ class Server:
                         if (freeSlot==True and totalAcceptedSoFar == minThreshold):
                             try:
                                 print("Confirm-0")
-                                self.s.sendto(message.encode(), (pIp, int(pName)))
+                                self._sender(message, pIp, int(pName))
+                                #self.s.sendto(message.encode(), (pIp, int(pName)))
                             except Exception as e:
                                 print(e)
                                 pass
@@ -466,7 +482,8 @@ class Server:
                         if (pIp != requesterIP or pName != requesterPort):
                             try:
                                 print("Cancel-0")
-                                self.s.sendto(message.encode(), (pIp, int(pName)))
+                                self._sender(message, pIp, int(pName))
+                                #self.s.sendto(message.encode(), (pIp, int(pName)))
                             except Exception as e:
                                 print(e)
                                 pass
@@ -485,7 +502,8 @@ class Server:
                     message = model.encode(scheduled)
                     try:
                         print("Schedule-2")
-                        self.s.sendto(message.encode(), (requesterIP, int(requesterPort)))
+                        self._sender(message, requesterIP, int(requesterPort))
+                        #self.s.sendto(message.encode(), (requesterIP, int(requesterPort)))
                     except Exception as e:
                         print(e)
                         pass
@@ -494,7 +512,8 @@ class Server:
                     message = model.encode(non_schedule)
                     try:
                         print("Non_Schedule-1")
-                        self.s.sendto(message.encode(), (requesterIP, int(requesterPort)))
+                        self._sender(message, requesterIP, int(requesterPort))
+                        #self.s.sendto(message.encode(), (requesterIP, int(requesterPort)))
                     except Exception as e:
                         print(e)
                         pass
@@ -508,7 +527,8 @@ class Server:
                             print("confirm-1")
                             confirm = model.Confirm(originalInvite.meetingNumber, meetingRoom)
                             message = model.encode(confirm)
-                            self.s.sendto(message.encode(), (addr[0], int(acceptOrReject.clientName)))
+                            self._sender(message, addr[0], int(acceptOrReject.clientName))
+                            #self.s.sendto(message.encode(), (addr[0], int(acceptOrReject.clientName)))
                         except Exception as e:
                             print(e)
                             pass
@@ -520,7 +540,8 @@ class Server:
                         message = model.encode(cancel)
                         try:
                             print("cancel-1")
-                            self.s.sendto(message.encode(), (addr[0], int(acceptOrReject.clientName)))
+                            self._sender(message, addr[0], int(acceptOrReject.clientName))
+                            #self.s.sendto(message.encode(), (addr[0], int(acceptOrReject.clientName)))
                         except Exception as e:
                             print(e)
                             pass
@@ -566,33 +587,17 @@ class Server:
                         minParticipant = int(seek[0][2])
 
                         # check to see if below min now
-                        # What's the total number of invitees for this meeting?
-                        totalInvites = self.conn.cursor().execute(
-                            '''
-                            SELECT COUNT(*) from inviteList where meetingNumber=? 
-                            ''',(withdraw.meetingNumber,)
-                        ).fetchone()[0]
-
-
-                        # How many accepted so far?
+                        # How many accepted now?
                         totalAcceptedSoFar = self.conn.cursor().execute(
                             '''
                             SELECT COUNT(*) from inviteList where meetingNumber=? and status='Accepted'
                             ''',(withdraw.meetingNumber,)
                         ).fetchone()[0]
 
-                        # How many refused so far or withdrawn so far?
-                        totalRefusedSoFar = self.conn.cursor().execute(
-                            '''
-                            SELECT COUNT(*) from inviteList where meetingNumber=? and (status='Refused' or status='Withdrawn')
-                            ''',(withdraw.meetingNumber,)
-                        ).fetchone()[0]
-
-                        # Based on the current accepted or refused tally, can the meeting still happen?
+                        # Based on the current accepted rate, can the meeting still happen after the withdrawal?
                 
-                        howManyCanStillAccept = totalInvites - totalRefusedSoFar
 
-                        if (howManyCanStillAccept < minParticipant):
+                        if (totalAcceptedSoFar < minParticipant):
                             # cancel the entire meeting; send notification to all participants
                             allParticipants = self.conn.cursor().execute(
                                 '''
@@ -612,7 +617,8 @@ class Server:
                                 pIp = participant[1]
                                 pName = participant[2]
                                 try:
-                                    self.s.sendto(message.encode(), (pIp, int(pName)))
+                                    self._sender(message, pIp, int(pName))
+                                    #self.s.sendto(message.encode(), (pIp, int(pName)))
                                 except Exception as e:
                                     print(e)
                                     pass
@@ -622,7 +628,8 @@ class Server:
                             requesterIP = invite.requesterIP
                             requesterPort = invite.targetName
                             try:
-                                self.s.sendto(message.encode(), (requesterIP, int(requesterPort)))
+                                self._sender(message, requesterIP, int(requesterPort))
+                                #self.s.sendto(message.encode(), (requesterIP, int(requesterPort)))
                             except Exception as e:
                                 print(e)
                                 pass
@@ -677,7 +684,8 @@ class Server:
                             pIp = participant[1]
                             pName = participant[2]
                             try:
-                                self.s.sendto(message.encode(), (pIp, int(pName)))
+                                self._sender(message, pIp, int(pName))
+                                #self.s.sendto(message.encode(), (pIp, int(pName)))
                             except Exception as e:
                                 print(e)
                                 pass
