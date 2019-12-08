@@ -7,10 +7,17 @@ import collections
 import queue
 import sqlite3
 import util
+import tkinter as tk
+from tkinter import ttk, messagebox
+
 # REPLACE THIS WITH SERVER'S IP (Server IP printed when first executing 'python3 server.py')
-host = '192.168.31.238'
+host = '10.32.10.6'
 #host = 'localhost'
 port = 8888
+
+root = tk.Tk()
+root.title("UDP Scheduler")
+nb = ttk.Notebook(root)
 
 class Client:
 
@@ -56,6 +63,126 @@ class Client:
         self._menu(0, 0)
 
     def _menu(self, state, prevState, storedData =  {}):
+
+        def populate_listbox():
+            db_list = util.getParticipantList(self.conn)
+            participant_list.delete(0, tk.END)
+            for item in db_list:
+                participant_list.insert(tk.END, item)
+
+        # TODO - Add meeting to DB
+        def create_meeting():
+            day = meeting_day.get()
+            month = meeting_month.get()
+            hour = meeting_hour.get()
+            min_num_participants = min_participants.get()
+            topic = meeting_topic.get()
+            selected_participants = [participant_list.get(i) for i in participant_list.curselection()]
+
+        # TODO - Add new contact
+        def add_new_contact():
+            ip = new_ip.get()
+            name = new_name.get()
+            if ip == "":
+                messagebox.showerror("add contact", "NO IP ENTERED")
+            elif name == "":
+                messagebox.showerror("add contact", "NO NAME ENTERED")
+            else:
+                messagebox.showinfo("add contact", "PLACEHOLDER FUNCTION NOT DONE - ADDED %s - %s" % (str(ip), str(name)))
+                # Add contact to participant listbox
+                populate_listbox()
+
+        def withdraw_from_confirmed():
+            meeting = confirmed_meetings.get()
+            if meeting != "":
+                messagebox.showinfo("withdraw", "PLACEHOLDER - WITHDRAW FROM %s" % meeting)
+                confirmed_meetings.config(values=util.getParticipantList(self.conn)) # TODO - update with right list
+            else:
+                messagebox.showerror("withdraw", "NO MEETING SELECTED")
+
+        def cancel_from_requested():
+            meeting = requested_meetings.get()
+            if meeting != "":
+                messagebox.showinfo("cancel", "PLACEHOLDER - CANCEL %s" % meeting)
+                confirmed_meetings.config(values=util.getParticipantList(self.conn)) # TODO - update with right list
+            else:
+                messagebox.showerror("cancel", "NO MEETING SELECTED")
+
+        splash_tab = tk.Frame(nb)
+        nb.add(splash_tab, text="Welcome")
+        meeting_req_tab = tk.Frame(nb)
+        nb.add(meeting_req_tab, text="Book Meeting")
+        meetings_tab = tk.Frame(nb)
+        nb.add(meetings_tab, text="Meeting Management")
+        contacts_tab = tk.Frame(nb)
+        nb.add(contacts_tab, text="Contacts")
+        nb.pack()
+
+        # Splash Page
+        tk.Label(splash_tab, text="").pack()
+        tk.Label(splash_tab, text="UDP SCHEDULER", font=('Helvetica', 24, 'bold')).pack()
+        tk.Label(splash_tab, text="COEN 445", font="bold").pack()
+        tk.Label(splash_tab, text="").pack()
+        tk.Label(splash_tab, text="By:").pack()
+        tk.Label(splash_tab, text="C. Kokorogiannis, T. Serrano, M. Tao Yu").pack()
+        tk.Label(splash_tab, text="").pack()
+        tk.Label(splash_tab, text="").pack()
+        tk.Label(splash_tab, text="IP: %s:%s" % (str(host), str(port))).pack()
+
+        # Book a meeting
+        tk.Label(meeting_req_tab, text="Book a Meeting", font="bold", justify="center")\
+            .grid(row=0, column=0, columnspan=6, pady=10, sticky="N")
+        tk.Label(meeting_req_tab, text="Month:").grid(row=1, column=0, pady=5, padx=(5, 0), sticky="W")
+        meeting_month = tk.Entry(meeting_req_tab)
+        meeting_month.grid(row=1, column=1, pady=5, padx=(0, 5), sticky="W")
+        tk.Label(meeting_req_tab, text="Day:").grid(row=1, column=2, pady=5, padx=(5, 0), sticky="W")
+        meeting_day = tk.Entry(meeting_req_tab)
+        meeting_day.grid(row=1, column=3, pady=5, padx=(0, 5), sticky="W")
+        tk.Label(meeting_req_tab, text="Hour:").grid(row=1, column=4, pady=5, padx=(5, 0), sticky="W")
+        meeting_hour = tk.Entry(meeting_req_tab)
+        meeting_hour.grid(row=1, column=5, pady=5, padx=(5, 5), sticky="W")
+        tk.Label(meeting_req_tab, text="Minimum Participants:").grid(row=2, column=0, pady=5, padx=(5, 0), sticky="W")
+        min_participants = tk.Entry(meeting_req_tab)
+        min_participants.grid(row=2, column=1, pady=5, padx=(0, 5), sticky="W")
+        tk.Label(meeting_req_tab, text="Meeting Topic:").grid(row=2, column=2, pady=5, padx=(5, 0), sticky="W")
+        meeting_topic = tk.Entry(meeting_req_tab)
+        meeting_topic.grid(row=2, column=3, pady=5, padx=(0, 5), sticky="W")
+        tk.Label(meeting_req_tab, text="Select Participants:").grid(row=3, column=0, pady=5, padx=(5, 0), sticky="W")
+        participant_list = tk.Listbox(meeting_req_tab, selectmode='multiple', height=5)
+        participant_list.grid(row=3, column=1, pady=5, padx=(0, 5), sticky="W")
+        submit_meeting_req = tk.Button(meeting_req_tab, text="Submit", fg="green", command=lambda: create_meeting())
+        submit_meeting_req.grid(row=3, column=5, pady=(0, 10), padx=10, sticky="SE")
+        populate_listbox()
+
+        # Meeting Management
+        tk.Label(meetings_tab, text="Meeting Management", font="bold", justify="center") \
+            .grid(row=0, column=0, columnspan=6, pady=(10, 30), sticky="N")
+        tk.Label(meetings_tab, text="Confirmed Meetings:").grid(row=1, column=0, pady=(5, 0), padx=(5, 0), sticky="NW")
+        confirmed_meetings = ttk.Combobox(meetings_tab, values=util.getParticipantList(self.conn), height=5, state="readonly") # TODO - get right list
+        confirmed_meetings.grid(row=1, column=1, pady=5, sticky="NW")
+        withdraw_confirmed = tk.Button(meetings_tab, text="Withdraw", command=lambda: withdraw_from_confirmed()).grid(row=2, column=1, sticky="E") # TODO - complete withdraw function
+        tk.Label(meetings_tab, text="Requested Meetings:").grid(row=1, column=2, pady=5, padx=(100, 0), sticky="NW")
+        requested_meetings = ttk.Combobox(meetings_tab, values=util.getParticipantList(self.conn), height=5, state="readonly") # TODO - get right list
+        requested_meetings.grid(row=1, column=3, pady=5, stick="NW")
+        cancel_requested = tk.Button(meetings_tab, text="Cancel", command=lambda: cancel_from_requested()).grid(row=2, column=3, sticky="E") # TODO - complete cancel function
+
+        # Contacts
+        tk.Label(contacts_tab, text="Contacts", font="bold", justify="center").grid(row=0, column=2, pady=(10, 10), sticky="N")
+        tk.Label(contacts_tab, text="Contacts:").grid(row=1, column=0, pady=5, padx=(5, 0), sticky="W")
+        contacts = ttk.Combobox(contacts_tab, values=util.getParticipantList(self.conn), height=5, state="readonly")
+        contacts.grid(row=1, column=1, pady=5, padx=(0, 5), sticky="W")
+        ttk.Separator(contacts_tab, orient="horizontal").grid(row=2, columnspan=6, pady=10, padx=5, sticky="EW")
+        tk.Label(contacts_tab, text="Add Contact:").grid(row=3, column=0, pady=(0, 10), padx=5, sticky="W")
+        tk.Label(contacts_tab, text="Contact IP:").grid(row=4, column=0, padx=(5, 0), sticky="W")
+        new_ip = tk.Entry(contacts_tab)
+        new_ip.grid(row=4, column=1, sticky="W")
+        tk.Label(contacts_tab, text="Contact Name:").grid(row=4, column=2, padx=5, sticky="W")
+        new_name = tk.Entry(contacts_tab)
+        new_name.grid(row=4, column=3, sticky="W")
+        add_contact = tk.Button(contacts_tab, text="Add", fg="green", command=lambda: add_new_contact())
+        add_contact.grid(row=4, column=4, sticky="E", padx=10)
+
+
         if (state == 0):
             print("****Main Menu*****")
             print("\tOption 1: Request a meeting")
@@ -318,6 +445,8 @@ class Client:
             else:
                 print("****Invalid Command. Please try again")
                 return self._menu(state, prevState)
+
+        root.mainloop()
 
 
 
