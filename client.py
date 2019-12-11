@@ -109,7 +109,7 @@ class Client:
     def _sender(self, message):
         try :
             logging.info("\nSending:" + str(message) + " to " + str((host, port)))
-            self.s.sendto(message.encode(), (host, port))
+            self.r.sendto(message.encode(), (host, port))
             
         except Exception as e:
             print(e)
@@ -121,8 +121,8 @@ class Client:
     def _listener(self):
         self.r.bind(('', int(self.sessionName)))
         self.r.setblocking(0)
-        print("*****Current IP")
-        print(self.ip)
+        #print("*****Current IP")
+        #print(self.ip)
         while (self.running):
             try:
                 d = self.r.recvfrom(1024)
@@ -130,12 +130,15 @@ class Client:
                 addr = d[1]
 
                 if (len(data) > 10):
-                    logging.info("\nReceived:" + str(data) + " from " + str(addr))
+                    logging.info("\nReceived:" + str(data, 'utf-8') + " from " + str(addr))
                     self.startWorker(data, addr)
                 #print('It worked! ' + str(data,'utf-8'))
             
             except (socket.error):
                 pass
+        self.s.close()
+        self.r.close()
+        
     def worker(self, data):
         data = str(data, 'utf-8')
     
@@ -190,7 +193,7 @@ class Client:
                 ).fetchall()
 
             except Exception as e:
-                print("Something went wrong")
+                print("-6")
                 print(e)
                 pass
             if (len(seek) > 0):
@@ -214,9 +217,7 @@ class Client:
                         print(e)
                         pass
                 else:
-                    print("*************************!!!!!!!!!!!!!!!*****************************")
-                    for row in seek:
-                        print(row)
+                    #print("*************************!!!!!!!!!!!!!!!*****************************")
                     self.conn.cursor().execute(
                         '''
                         INSERT INTO booking(date, time, meetingNumber, sourceIP, sourceClient, status, room, confirmedParticipant, topic, reason, min) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -282,7 +283,7 @@ class Client:
             self._sender(message)
 
         if (dataDict.type == "Confirm" or dataDict.type == "Cancel" or dataDict.type == "Scheduled" or dataDict.type == "Non_Scheduled"):
-            print("R******R")
+            #print("R******R")
             meetingStatus = dataDict
             status = ""
             reason = ""
@@ -312,10 +313,10 @@ class Client:
                 pass
 
             if (len(seek)>0):
-                print("P*******P")
-                print(reason)
-                print(status)
-                print(meetingStatus.meetingNumber)
+                #print("P*******P")
+                #print(reason)
+                #print(status)
+                #print(meetingStatus.meetingNumber)
                 try:
                     '''
                     self.conn.cursor().execute(
@@ -428,6 +429,32 @@ class Client:
                         self._sender(message)
             util.commit(self.conn)
             self.lock.release()
+        
+        if (dataDict.type == "Withdraw"):
+            # Update meeting Participant list
+            withdraw = dataDict
+            meetingNumber = withdraw.meetingNumber
+            withdrawerIP = withdraw.clientIP
+            withdrawerPort = withdraw.clientName
+
+            agenda = self.conn.cursor().execute(
+                '''
+                    SELECT * from booking where meetingNumber=?
+                ''', (meetingNumber,)
+            ).fetchall()
+
+            if (len(agenda)!=0):
+                participants = agenda[0][7].strip("[]").split(", ")
+                participants.append(["Withdrawal:" + withdrawerIP, withdrawerPort])
+
+                print(participants)
+
+                self.conn.cursor().execute(
+                    '''
+                        UPDATE booking SET confirmedParticipant=? where meetingNumber=?
+                    ''', (str(participants), meetingNumber)
+                )
+
 
         if (dataDict.type == "Room_Change"):
             roomChange = dataDict

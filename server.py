@@ -4,10 +4,10 @@ import model
 import json
 import threading
 import collections
-import queue
 import sqlite3
 import util
 import time
+import logging
 
 HOST = ''
 PORT = 8888
@@ -19,6 +19,13 @@ class Server:
         self.lock = threading.Lock()
         self.ip = util.get_ip()
         self.conn = sqlite3.connect("Server.db", check_same_thread=False)
+
+        logging.basicConfig(filename="server_log.txt",
+                            filemode='a',
+                            format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
+                            datefmt='%H:%M:%S',
+                            level=logging.DEBUG)
+
         util.reset(self.conn)
         util.createServerBookingTable(self.conn)
         util.createServerRecevedRequestTable(self.conn)
@@ -52,6 +59,7 @@ class Server:
         #self._menu(0,0)
         self.startListner()
         self.startMenu()
+        #self.messageAckWatchdog()
         print("Server is running")
 
 
@@ -60,10 +68,37 @@ class Server:
         print(self.ip)
         threading.Thread(target=self._menu, args=(0,0,)).start()
 
+    def messageAckWatchdog(self):
+        threading.Thread(target=self.resendMessage).start()
+
+    def resendMessage(self):
+        while (self.running):
+            notAckList = self.conn.cursor().execute(
+            '''
+            SELECT * FROM inviteList where status!='Sent'
+            '''
+            ).fetchall()
+
+            time.sleep(50)
+            print("Resending data")
+            for sentInvite in notAckList:
+                meetingNumber = sentInvite[0]
+                ip = sentInvite[1]
+                port = sentInvite[2]
+                message = sentInvite[4]
+                ackCheck = self.conn.cursor().execute(
+                '''
+                SELECT * FROM inviteList where meetingNumber=? and ip =? and client =? and status="Sent"
+                ''', (meetingNumber, ip, port)
+                ).fetchall()
+
+                if (len(ackCheck) !=0):
+                    self._sender(message, ip, port)
+
     def _menu(self, state, prevState, storedData =  {}):
         if (state == 0):
             print("\t****Server Main Menu*****")
-            print("\t '1' to print booked agenda")
+            print("\t '1' for room change")
             print("\t'Exit' to turn off server")
 
             msg = input("\tEnter input: ")
@@ -75,23 +110,70 @@ class Server:
             if (msg.isdigit() and int(msg) == 1):
                 seek = self.conn.cursor().execute(
                 '''
-                SELECT* from booked
+                SELECT* from booked where status !="Cancelled"
                 '''
                 ).fetchall()
-                print("****Booked meetings")
+                print("****Room change menu")
+                count = 0
                 for row in seek:
-                    print(row)
+                    print("[" + str(count) + "] " + str(row))
+                    count+=1
+                msg = input("Select a meeting: ")
+                if (msg == "Q"):
+                    return self._menu(0, 0)
+                elif (msg.isdigit() and int(msg) >= 0 and int(msg) < len(seek)):
+                    storedData["meeting"] = seek[int(msg)]
+                    return self._menu(1, state, storedData)
+                else:
+                    print("\t****Invalid Command. Please try again")
+                    return self._menu(state, prevState)
+            else:
+                print("\t****Invalid Command. Please try again")
+                return self._menu(state, prevState)
+
+        if (state == 1):
+            msg = input("Select the new room number: ")
+            if (msg == "Q"):
+                    return self._menu(0, 0)
+            elif (msg.isdigit() and int(msg) >= 0):
+                selectedMeeting = storedData["meeting"]
+                #print(storedData["meeting"])
+                #print(selectedMeeting)
+                meetingNumber = selectedMeeting[2]
+                newRoomNumber = msg
+                roomChange = model.Room_Change(meetingNumber, msg)
+
+                message = model.encode(roomChange)
+                inviteList = self.conn.cursor().execute(
+                    '''
+                        SELECT * from inviteList where meetingNumber=?
+                    ''', (int(meetingNumber),)
+                ).fetchall()
+
+                for invite in inviteList:
+                    ip = invite[1]
+                    port = invite[2]
+
+                    self._sender(message, ip, int(port))
+                self.conn.cursor().execute(
+                    '''
+                    UPDATE booked SET room=? where meetingId=?
+                    ''', (newRoomNumber, meetingNumber)
+                )
+
 
                 return self._menu(0, 0)
             else:
                 print("\t****Invalid Command. Please try again")
-                return self._menu(state, prevState)
+                return self._menu(state, prevState, storedData)
+
 
     def startListner(self):
         threading.Thread(target=self._listener).start()
 
     def _sender(self, message, ip, port):
         try :
+            logging.info("\nSending:" + str(message) + " to " + str((ip, port)))
             self.s.sendto(message.encode(), (ip, port))
             
         except Exception as e:
@@ -109,7 +191,7 @@ class Server:
 
             if not data: 
                 break
-            
+            logging.info("\nReceived:" + str(data, 'utf-8') + " from " + str(addr))
             self.startWorker(data, addr)
 
         self.s.close()
@@ -128,7 +210,7 @@ class Server:
         # Request Handler
         ###################################
         if (dataDict["type"] == "Request"):
-            print("R-1")
+            #print("R-1")
             request = model.decodeJson(data)
             # Check the cache to see if already responded to the same request before
             self.lock.acquire()
@@ -144,19 +226,19 @@ class Server:
                 pass
             if(len(seek) > 0):
                 if (seek[0][0] == data):
-                    print("Message deja vu")
+                    #print("Message deja vu")
                     response = seek[0][1]
                     self._sender(response, addr[0], int(request.requestClientName))
                     #self.s.sendto(response.encode(), (addr[0], int(request.requestClientName)))
                 else:
-                    print("Invalid message")
+                    #print("Invalid message")
                     response = model.Response(request.requestNumber, request.requestClientName, "The request number has been previously used for another message")
                     response = model.encode(response)
                     self._sender(response, addr[0], int(request.requestClientName))
                     #self.s.sendto(response.encode(), (addr[0], int(request.requestClientName)))
                 self.lock.release()
                 return
-            print("R-2")
+            #print("R-2")
             # Check if free slot is available, respond accordingly and update cache
             freeSlot = True
             try:
@@ -173,9 +255,9 @@ class Server:
 
             meetingNumber = -1
             message = ""
-            print("R-3")
+            #print("R-3")
             if (len(seek) > self.meetingRoomNum):
-                print("R-4")
+                #print("R-4")
                 response = model.Response(request.requestNumber, request.requestClientName, "No room available")
                 message = model.encode(response)
                 try:
@@ -185,7 +267,7 @@ class Server:
                     print(e)
                     pass
             else:
-                print("R-5")
+                #print("R-5")
                 invite = model.Invite(request.date, request.time, request.topic, addr[0], request.requestClientName, request.requestClientName)
                 meetingNumber = invite.meetingNumber
                 try:
@@ -204,14 +286,15 @@ class Server:
                 except Exception as e:
                     print(e)
                     pass
-
+                print("WTF")
+                print(request.participant)
                 for participant in request.participant:
                     print("R-5-1")
                     invite.targetName = participant[1]
                     message = model.encode(invite)
                     try:
-                        print(participant[0])
-                        print(int(invite.targetName))
+                        #print(participant[0])
+                        #print(int(invite.targetName))
                         self._sender(message, participant[0], int(invite.targetName))
                         #self.s.sendto(message.encode(), (participant[0], int(invite.targetName)))
                     except Exception as e:
@@ -220,14 +303,14 @@ class Server:
                     try:
                         self.conn.cursor().execute(
                             '''
-                            INSERT INTO inviteList(meetingNumber, ip, client, status) VALUES (?, ?, ?, ?)
-                            ''', (invite.meetingNumber, participant[0], participant[1], "Sent")
+                            INSERT INTO inviteList(meetingNumber, ip, client, status, message) VALUES (?, ?, ?, ?, ?)
+                            ''', (invite.meetingNumber, participant[0], participant[1], "Sent", message)
                         )
                     except Exception as e:
                         print(e)
                         pass
 
-            print("R-6")
+            #print("R-6")
             self.conn.cursor().execute(
                 '''
                 INSERT INTO request(request, prevResponse, IP, client, requestNumber, meetingNumber) VALUES (?, ?, ?, ?, ?, ?)
@@ -377,9 +460,8 @@ class Server:
                     ''', (originalInvite.date, originalInvite.time, originalInvite.meetingNumber)
                     ).fetchall()
                     '''
-                    print("wtf")
-                    print(originalInvite.meetingNumber)
-                    print(len(seek))
+                    #print(originalInvite.meetingNumber)
+                    #print(len(seek))
                 except Exception as e:
                     print("Something went wrong")
                     print(e)
@@ -387,14 +469,13 @@ class Server:
                 # If the meeting has already been scheduled, do not add a new entry. 
                 if (len(seek) >= self.meetingRoomNum):
                     meetingNumber = seek[0][2]
-                    print("*!*!*!*!**!*!*!*!!*")
+                    #print("*!*!*!*!**!*!*!*!!*")
                     seek = self.conn.cursor().execute(
                         '''
                         SELECT * from booked where meetingId=?
                         ''', (originalInvite.meetingNumber,)
                         ).fetchall()
-                    print(len(seek))
-                    print(seek[0][2])
+                    #print(len(seek))
                     if (len(seek) == 0):
                         freeSlot = False
                     else:
@@ -415,7 +496,7 @@ class Server:
                 confirm = model.Confirm(originalInvite.meetingNumber, len(seek)+1)
 
                 if (freeSlot==True and totalAcceptedSoFar == minThreshold):
-                    print("DB - 1")
+                    #print("DB - 1")
                     if addMeeting:
                         try:
                             self.conn.cursor().execute(
@@ -440,7 +521,7 @@ class Server:
                             pass
 
                 message = model.encode(confirm)
-                print("loc-0")
+                #print("loc-0")
                 seekMeetingRoom = self.conn.cursor().execute(
                     '''
                     SELECT * from meetingToRoom where meetingNumber=?
@@ -482,7 +563,7 @@ class Server:
                         pName = participant[2]
                         if (pIp != requesterIP or pName != requesterPort):
                             try:
-                                print("Cancel-0")
+                                #print("Cancel-0")
                                 self._sender(message, pIp, int(pName))
                                 #self.s.sendto(message.encode(), (pIp, int(pName)))
                             except Exception as e:
@@ -490,7 +571,7 @@ class Server:
                                 pass
                 
                 # Creating and sending message to requester. 
-                print("loc-1")
+                #print("loc-1")
                 oldRequest = self.conn.cursor().execute(
                     '''
                     SELECT * FROM request where meetingNumber=?
@@ -502,7 +583,7 @@ class Server:
                     scheduled = model.Scheduled(requestNumber, originalInvite.meetingNumber, meetingRoom, listConfirmedParticipant) # Testing
                     message = model.encode(scheduled)
                     try:
-                        print("Schedule-2")
+                        #print("Schedule-2")
                         self._sender(message, requesterIP, int(requesterPort))
                         #self.s.sendto(message.encode(), (requesterIP, int(requesterPort)))
                     except Exception as e:
@@ -512,20 +593,20 @@ class Server:
                     non_schedule = model.Non_Scheduled(requestNumber, originalInvite.meetingNumber, originalInvite.date, originalInvite.time, minThreshold, listConfirmedParticipant, originalInvite.topic)
                     message = model.encode(non_schedule)
                     try:
-                        print("Non_Schedule-1")
+                        #print("Non_Schedule-1")
                         self._sender(message, requesterIP, int(requesterPort))
                         #self.s.sendto(message.encode(), (requesterIP, int(requesterPort)))
                     except Exception as e:
                         print(e)
                         pass
-                print("loc-2")
+                #print("loc-2")
                 # If we already reached the min participant threshold before and a new participant accept the meeting, we will only send a confirmation in response to the current sender instead of a batch message to all participants
                 # The requester should had received a new participant list including this new participant with the above code
                 # Edge case handler-> sender did not receive the first confirm response. We'll resend the message here. 
                 if (freeSlot==True and totalAcceptedSoFar > minThreshold):
                     if (requesterIP != addr[0] or requesterPort !=acceptOrReject.clientName):
                         try:
-                            print("confirm-1")
+                            #print("confirm-1")
                             confirm = model.Confirm(originalInvite.meetingNumber, meetingRoom)
                             message = model.encode(confirm)
                             self._sender(message, addr[0], int(acceptOrReject.clientName))
@@ -540,7 +621,7 @@ class Server:
                         cancel = model.Cancel(originalInvite.meetingNumber, "Below Minimum Participant")
                         message = model.encode(cancel)
                         try:
-                            print("cancel-1")
+                            #print("cancel-1")
                             self._sender(message, addr[0], int(acceptOrReject.clientName))
                             #self.s.sendto(message.encode(), (addr[0], int(acceptOrReject.clientName)))
                         except Exception as e:
@@ -638,7 +719,7 @@ class Server:
 
         if (dataDict["type"] == "Cancel"):
             cancel = model.decodeJson(data)
-            print("Cancel-1")
+            #print("Cancel-1")
             self.lock.acquire()
 
             # Does the referenced meeting exists?
@@ -649,7 +730,7 @@ class Server:
             ).fetchall()
 
             if (len(seek) > 0):
-                print("Cancel-2")
+                #print("Cancel-2")
                 # If yes, fetch the saved copy of the original invite to find out the ip and sessionName of the requester, the min threshold, etc.
                 seek = self.conn.cursor().execute(
                 '''
@@ -657,14 +738,14 @@ class Server:
                 ''', (cancel.meetingNumber, )
                 ).fetchall()
                 if (len(seek)>0):
-                    print("Cancel-3")
+                    #print("Cancel-3")
                     inviteStr = seek[0][1]
                     invite = model.decodeJson(inviteStr)
                     requesterIP = invite.requesterIP
                     requesterName = invite.requesterName
                     # If the current message indeed was sent by the original meeting requester, we cancel the meeting and send a message to all participants
                     if (requesterIP == addr[0] and requesterName == cancel.clientName):
-                        print("Cancel-4")
+                        #print("Cancel-4")
                         self.conn.cursor().execute(
                         '''
                         UPDATE booked SET status="Cancelled" where meetingId=?
@@ -680,7 +761,7 @@ class Server:
 
                         cancel = model.Cancel(cancel.meetingNumber, "Cancelled by the organizer")
                         message = model.encode(cancel)
-                        print("Cancel-5")
+                        #print("Cancel-5")
                         for participant in allParticipants:
                             pIp = participant[1]
                             pName = participant[2]

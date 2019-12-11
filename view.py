@@ -97,9 +97,12 @@ class MainView(tk.Frame):
             meeting = confirmed_meetings.get()
             index = confirmed_meetings.current()
 
-            if meeting != "":
+            if (meeting != "" and len(self.confirmed_meetings_list) >= index):
                 messagebox.showinfo("withdraw", "WITHDRAW FROM %s" % meeting)
-                meetingNumber = self.confirmed_meetings_list[index][2]
+                try:
+                    meetingNumber = self.confirmed_meetings_list[index][2]
+                except Exception as e:
+                    return
                 withdraw = model.Withdraw(meetingNumber, self.client.sessionName)
                 message = model.encode(withdraw)
                 messageType = "Withdrawn"
@@ -119,10 +122,13 @@ class MainView(tk.Frame):
         def cancel_from_requested():
             meeting = requested_meetings.get()
             index = requested_meetings.current()
-            if meeting != "":
+            if (meeting != "" and len(self.requested_meetings_list) >= index):
                 messagebox.showinfo("cancel", "CANCEL %s" % meeting)
                 #onfirmed_meetings.config(values=util.getParticipantList(self.client.conn)) # TODO - update with right list
-                meetingNumber = self.requested_meetings_list[index][2]
+                try:
+                    meetingNumber = self.requested_meetings_list[index][2]
+                except Exception as e:
+                    return
                 print("debugging")
                 print(meetingNumber)
                 print(meeting)
