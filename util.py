@@ -60,7 +60,7 @@ def createClientAcceptTable(conn):
         conn.cursor().execute(
             '''
             CREATE TABLE IF NOT EXISTS 
-            accept(meetingNumber INTEGER NOT NULL, date VARCHAR(25) NOT NULL, time VARCHAR(25) NOT NULL, status VARCHAR(25) NOT NULL)
+            accept(meetingNumber INTEGER NOT NULL, date VARCHAR(25) NOT NULL, time VARCHAR(25) NOT NULL, status VARCHAR(25) NOT NULL, message VARCHAR(1000) NOT NULL)
             '''
         )
     except:
@@ -94,7 +94,7 @@ def createServerInviteListTable(conn):
         conn.cursor().execute(
             '''
             CREATE TABLE IF NOT EXISTS 
-            inviteList(meetingNumber INTEGER NOT NULL, ip VARCHAR(25) NOT NULL, client VARCHAR(25) NOT NULL, status VARCHAR(25) NOT NULL)
+            inviteList(meetingNumber INTEGER NOT NULL, ip VARCHAR(25) NOT NULL, client VARCHAR(25) NOT NULL, status VARCHAR(25) NOT NULL, message VARCHAR(1000) NOT NULL)
             '''
         )
     except:

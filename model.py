@@ -109,6 +109,12 @@ class Non_Scheduled:
         self.listConfirmedParticipant = listConfirmedParticipant
         self.topic = topic
 
+class Room_Change:
+    def __init__(self, meetingNumber, newRoom):
+        self.type = "Room_Change"
+        self.meetingNumber = meetingNumber
+        self.newRoom = newRoom
+
 '''
 #r = Request("test","test","test","test","test")
 #print(r.requestNumber)
