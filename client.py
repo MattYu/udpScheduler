@@ -39,7 +39,7 @@ class Client:
             sys.exit()
 
         self.conn = sqlite3.connect(sessionName + "Client.db", check_same_thread=False)
-        #util.reset(self.conn)
+        util.reset(self.conn)
         util.createBookingTable(self.conn)
         util.createParticipantTable(self.conn)
         util.createTrackingTable(self.conn)
@@ -444,8 +444,8 @@ class Client:
             ).fetchall()
 
             if (len(agenda)!=0):
-                participants = agenda[0][7].strip("[]").split(", ")
-                participants.append(["Withdrawal:" + withdrawerIP, withdrawerPort])
+                participants = agenda[0][7][1:-1] + "]"
+                participants = "[" + participants + str(["Withdrawal:" + withdrawerIP, withdrawerPort])
 
                 print(participants)
 
