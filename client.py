@@ -39,7 +39,7 @@ class Client:
             sys.exit()
 
         self.conn = sqlite3.connect(sessionName + "Client.db", check_same_thread=False)
-        util.reset(self.conn)
+        #util.reset(self.conn)
         util.createBookingTable(self.conn)
         util.createParticipantTable(self.conn)
         util.createTrackingTable(self.conn)
