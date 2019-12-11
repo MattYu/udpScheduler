@@ -202,6 +202,46 @@ def getParticipantList(conn):
         print(e)
         pass
 
+def getConfirmedList(conn):
+    try:
+        res = conn.cursor().execute(
+        '''
+        SELECT* from booking where status="Confirmed"
+        '''
+        ).fetchall()
+
+        return res
+
+    except Exception as e:
+        print(e)
+        pass
+
+def getScheduledList(conn):
+    try:
+        res = conn.cursor().execute(
+            '''
+            SELECT* from booking where status="Scheduled"
+            '''
+        ).fetchall()
+
+        return res
+    except Exception as e:
+        print(e)
+        pass
+
+def getEntireList(conn):
+    try:
+        res = conn.cursor().execute(
+            '''
+            SELECT* from booking
+            '''
+        ).fetchall()
+
+        return res
+    except Exception as e:
+        print(e)
+        pass   
+
 def addParticipant(conn, ip, clientName = "8000"):
     try:
         conn.cursor().execute('INSERT INTO participant(ip, clientName) VALUES (?, ?)', (ip, clientName))

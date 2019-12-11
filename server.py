@@ -7,6 +7,7 @@ import collections
 import queue
 import sqlite3
 import util
+import time
 
 HOST = ''
 PORT = 8888
@@ -401,7 +402,7 @@ class Server:
                 ###############
 
 
-                # If we have reached the min participant threshold for the first, we will batch send messages to all those who have previously accepted the invite. Otherwise, a message will be sent only to the current correspondant
+                # If we have reached the min participant threshold for the first time, we will batch send messages to all those who have previously accepted the invite. Otherwise, a message will be sent only to the current correspondant
                 # The original meeting creator will get a slightly different conformation than the rest of the participants; we will peek at the original invite cached by the server to find out the identity of the original meeting creator
                 # The original meeting creator will get a new scheduled message with an updated list of participant each time a new participant accepts the invite after the original scheduled message was sent.
                 

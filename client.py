@@ -7,6 +7,9 @@ import collections
 import queue
 import sqlite3
 import util
+import tkinter as tk
+import time
+from view import *
 # REPLACE THIS WITH SERVER'S IP (Server IP printed when first executing 'python3 server.py')
 host = '192.168.31.238'
 #host = 'localhost'
@@ -14,9 +17,8 @@ port = 8888
 
 class Client:
 
-
-
     def __init__(self, sessionName = "8000"):
+        self.host = host
         self.sessionName = sessionName
         self.lock = threading.Lock()
         self.running = True
@@ -53,7 +55,15 @@ class Client:
 
         #self.startSender()
         self.startListener()
-        self._menu(0, 0)
+        #self._menu(0, 0)
+        #root = tk.Tk()
+        #root.title("UDP Scheduler2")
+        #set_nb(root)
+        self.mainView = MainView()
+        self.mainView.execute(self)
+        #main.pack(side="top", fill="both", expand=True)
+        root.mainloop()
+        self.running = False
 
     def _menu(self, state, prevState, storedData =  {}):
         if (state == 0):
@@ -548,13 +558,13 @@ class Client:
 
                     self.conn.cursor().execute(
                         '''
-                        UPDATE booking SET reason=? where meetingNumber=? and status!="Cancelled"
+                        UPDATE booking SET reason=? where meetingNumber=?
                         ''', (reason, meetingStatus.meetingNumber)
                     )
 
                     self.conn.cursor().execute(
                         '''
-                        UPDATE booking SET room=? where meetingNumber=? and status!="Cancelled"
+                        UPDATE booking SET room=? where meetingNumber=?
                         ''', (room, meetingStatus.meetingNumber)
                     )
 
@@ -644,7 +654,8 @@ class Client:
                         self._sender(message)
             util.commit(self.conn)
             self.lock.release()
-            
+        
+        self.mainView.refreshUI()
 
 if (len(sys.argv) > 1):
     Client(sys.argv[1])
