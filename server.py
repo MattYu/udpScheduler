@@ -26,7 +26,7 @@ class Server:
                             datefmt='%H:%M:%S',
                             level=logging.DEBUG)
 
-        #util.reset(self.conn)
+        util.reset(self.conn)
         util.createServerBookingTable(self.conn)
         util.createServerRecevedRequestTable(self.conn)
         util.createServerInviteTable(self.conn)

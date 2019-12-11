@@ -114,6 +114,49 @@ class MainView(tk.Frame):
                     ''',(messageType, meetingNumber)
                 )
                 confirmed_meetings.config(values=util.getConfirmedList(self.client.conn)) # TODO - update with right list
+
+                # Can now accept another meeting at the same time slot. Attempt to find a previously refused meeting 
+
+                seek =  self.client.conn.cursor().execute(
+                    '''
+                    SELECT* from booking where meetingNumber=?
+                    ''', (meetingNumber,)
+                ).fetchall()
+
+                date = seek[0][0]
+                time = seek[0][1]
+
+                # Find another previous refused meeting at the same date and time and accept it if one is found
+
+                seek =  self.client.conn.cursor().execute(
+                    '''
+                    SELECT* from booking where date=? and time=? and status="Refused"
+                    ''', (date,time)
+                ).fetchall()
+
+
+                if (len(seek)>0):
+                    newMeetingNumber = seek[0][2]
+
+                    add = model.Add(newMeetingNumber,self.client.sessionName)
+                    message = model.encode(add)
+
+                    self.client.conn.cursor().execute(
+                    '''
+                    UPDATE booking SET status =? where meetingNumber=?
+                    ''', ("Accepted", newMeetingNumber)
+                    )
+                    try:
+                        self.client.conn.cursor().execute(
+                            '''
+                            INSERT INTO accept(meetingNumber, date, time, status, message) VALUES (?, ?, ?, ?, ?)
+                            ''',(newMeetingNumber, date, time, "sent", message)
+                        )
+                    except Exception as e:
+                        print(e)
+                        pass
+                    self.client._sender(message)
+
                 self.client.lock.release()
                 self.refreshUI()
             else:
