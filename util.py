@@ -153,7 +153,7 @@ def createBookingTable(conn):
         conn.cursor().execute(
             '''
             CREATE TABLE IF NOT EXISTS 
-            booking(date VARCHAR(25) NOT NULL, time INTEGER NOT NULL, meetingNumber VARCHAR(25) NOT NULL, sourceIP VARCHAR(25) NOT NULL, sourceClient VARCHAR(25) NOT NULL, status VARCHAR(25) NOT NULL, room VARCHAR(25) NOT NULL, confirmedParticipant VARCHAR(25) NOT NULL, topic VARCHAR(25) NOT NULL, reason VARCHAR(100) NOT NULL, min VARCHAR(25) NOT NULL)
+            booking(date VARCHAR(25) NOT NULL, time INTEGER NOT NULL, meetingNumber VARCHAR(25) NOT NULL, sourceIP VARCHAR(25) NOT NULL, sourceClient VARCHAR(25) NOT NULL, status VARCHAR(25) NOT NULL, room VARCHAR(25) NOT NULL, confirmedParticipant VARCHAR(400) NOT NULL, topic VARCHAR(25) NOT NULL, reason VARCHAR(100) NOT NULL, min VARCHAR(25) NOT NULL)
             '''
         )
     except:
