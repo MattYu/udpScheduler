@@ -60,7 +60,7 @@ def createClientAcceptTable(conn):
         conn.cursor().execute(
             '''
             CREATE TABLE IF NOT EXISTS 
-            accept(meetingNumber INTEGER NOT NULL, date VARCHAR(25) NOT NULL, time VARCHAR(25) NOT NULL, status VARCHAR(25) NOT NULL)
+            accept(meetingNumber INTEGER NOT NULL, date VARCHAR(25) NOT NULL, time VARCHAR(25) NOT NULL, status VARCHAR(25) NOT NULL, message VARCHAR(1000) NOT NULL)
             '''
         )
     except:
@@ -94,7 +94,7 @@ def createServerInviteListTable(conn):
         conn.cursor().execute(
             '''
             CREATE TABLE IF NOT EXISTS 
-            inviteList(meetingNumber INTEGER NOT NULL, ip VARCHAR(25) NOT NULL, client VARCHAR(25) NOT NULL, status VARCHAR(25) NOT NULL)
+            inviteList(meetingNumber INTEGER NOT NULL, ip VARCHAR(25) NOT NULL, client VARCHAR(25) NOT NULL, status VARCHAR(25) NOT NULL, message VARCHAR(1000) NOT NULL)
             '''
         )
     except:
@@ -107,6 +107,17 @@ def createServerBookingTable(conn):
             '''
             CREATE TABLE IF NOT EXISTS 
             booked(date VARCHAR(25) NOT NULL, time INTEGER NOT NULL, meetingId INTEGER NOT NULL, status VARCHAR(25) NOT NULL, room VARCHAR(3) NOT NULL)
+            '''
+        )
+    except:
+        pass
+
+def createServerMeetingNumberToRoom(conn):
+    try:
+        conn.cursor().execute(
+            '''
+            CREATE TABLE IF NOT EXISTS 
+            meetingToRoom(meetingNumber INTEGER NOT NULL, room INTEGER NOT NULL)
             '''
         )
     except:
@@ -142,7 +153,7 @@ def createBookingTable(conn):
         conn.cursor().execute(
             '''
             CREATE TABLE IF NOT EXISTS 
-            booking(date VARCHAR(25) NOT NULL, time INTEGER NOT NULL, meetingNumber VARCHAR(25) NOT NULL, sourceIP VARCHAR(25), sourceClient VARCHAR(25), status VARCHAR(25), room VARCHAR(25) NOT NULL, confirmedParticipant VARCHAR(25) NOT NULL)
+            booking(date VARCHAR(25) NOT NULL, time INTEGER NOT NULL, meetingNumber VARCHAR(25) NOT NULL, sourceIP VARCHAR(25) NOT NULL, sourceClient VARCHAR(25) NOT NULL, status VARCHAR(25) NOT NULL, room VARCHAR(25) NOT NULL, confirmedParticipant VARCHAR(400) NOT NULL, topic VARCHAR(25) NOT NULL, reason VARCHAR(100) NOT NULL, min VARCHAR(25) NOT NULL)
             '''
         )
     except:
@@ -191,7 +202,47 @@ def getParticipantList(conn):
         print(e)
         pass
 
-def addParticipant(conn, ip, clientName = "defaultUser"):
+def getConfirmedList(conn):
+    try:
+        res = conn.cursor().execute(
+        '''
+        SELECT* from booking where status="Confirmed"
+        '''
+        ).fetchall()
+
+        return res
+
+    except Exception as e:
+        print(e)
+        pass
+
+def getScheduledList(conn):
+    try:
+        res = conn.cursor().execute(
+            '''
+            SELECT* from booking where status="Scheduled"
+            '''
+        ).fetchall()
+
+        return res
+    except Exception as e:
+        print(e)
+        pass
+
+def getEntireList(conn):
+    try:
+        res = conn.cursor().execute(
+            '''
+            SELECT* from booking
+            '''
+        ).fetchall()
+
+        return res
+    except Exception as e:
+        print(e)
+        pass   
+
+def addParticipant(conn, ip, clientName = "8000"):
     try:
         conn.cursor().execute('INSERT INTO participant(ip, clientName) VALUES (?, ?)', (ip, clientName))
         conn.commit()
@@ -244,6 +295,10 @@ def reset(conn):
         
         conn.cursor().execute(
             "DROP TABLE IF EXISTS meetingNum"
+        )
+
+        conn.cursor().execute(
+            "DROP TABLE IF EXISTS meetingToRoom"
         )
 
         

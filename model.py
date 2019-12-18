@@ -57,10 +57,25 @@ class Reject:
         self.meetingNumber = meetingNumber
         self.clientName = destinationPort
 
+class Add:
+    def __init__(self, meetingNumber, destinationPort):
+        self.type = "Add"
+        self.meetingNumber = meetingNumber
+        self.clientName = destinationPort
+
+class Added:
+    def __init__(self, meetingNumber, IP, destinationPort):
+        self.type = "Added"
+        self.meetingNumber = meetingNumber
+        self.ip = IP
+        self.clientName = destinationPort
+
 class Withdraw:
-    def __init__(self, meetingNumber):
+    def __init__(self, meetingNumber, destinationPort, ip=""):
         self.type = "Withdraw"
         self.meetingNumber = meetingNumber
+        self.clientIP = ip
+        self.clientName = destinationPort
 
 class Confirm:
     def __init__(self, meetingNumber, room):
@@ -77,10 +92,11 @@ class Scheduled:
         self.listConfirmedParticipant = listConfirmedParticipant
 
 class Cancel:
-    def __init__(self, meetingNumber, reason = ''):
+    def __init__(self, meetingNumber, reason = '', ipPort=8000):
         self.type = "Cancel"
         self.meetingNumber = meetingNumber
         self.reason = reason
+        self.clientName = ipPort
 
 class Non_Scheduled:
     def __init__(self, requestNumber, meetingNumber, date, time, minimum, listConfirmedParticipant, topic):
@@ -92,6 +108,12 @@ class Non_Scheduled:
         self.minimum = minimum
         self.listConfirmedParticipant = listConfirmedParticipant
         self.topic = topic
+
+class Room_Change:
+    def __init__(self, meetingNumber, newRoom):
+        self.type = "Room_Change"
+        self.meetingNumber = meetingNumber
+        self.newRoom = newRoom
 
 '''
 #r = Request("test","test","test","test","test")
